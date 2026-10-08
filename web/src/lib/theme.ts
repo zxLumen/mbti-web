@@ -17,7 +17,11 @@ export const THEMES: ThemeDef[] = [
   { id: 'paper-plum', name: '纸感 · 紫棠', swatch: 'linear-gradient(135deg, #faf6f9 0%, #7b3f6e 100%)', desc: '米白纸 + 紫棠,雅致' },
   // —— 结构不同的其他设计 ——
   { id: 'night', name: '深邃夜蓝', swatch: 'radial-gradient(1200px 800px at 20% 0%, #162056 0%, #0b1020 60%)', desc: '深海蓝底 + 光晕,发光描边' },
-  { id: 'aurora', name: '极光玻璃', swatch: 'linear-gradient(135deg, #7c3aed, #0ea5e9 55%, #14b8a6)', desc: '极光渐变 + 毛玻璃卡片' },
+  { id: 'aurora', name: '极光 · 霓蓝', swatch: 'linear-gradient(135deg, #7c3aed, #0ea5e9 60%)', desc: '紫青两团柔光,毛玻璃卡片' },
+  { id: 'aurora-emerald', name: '极光 · 翡翠', swatch: 'linear-gradient(135deg, #059669, #0ea5e9 60%)', desc: '青绿蓝,清透' },
+  { id: 'aurora-sunset', name: '极光 · 暮霞', swatch: 'linear-gradient(135deg, #d946ef, #f97316 60%)', desc: '紫粉橙,暖而浓' },
+  { id: 'aurora-ice', name: '极光 · 极地', swatch: 'linear-gradient(135deg, #67e8f9, #818cf8 60%)', desc: '冰青靛,冷静通透' },
+  { id: 'aurora-gold', name: '极光 · 流金', swatch: 'linear-gradient(135deg, #f59e0b, #fb7185 60%)', desc: '琥珀玫,热烈' },
   { id: 'vivid', name: '渐变活力', swatch: 'linear-gradient(135deg, #7c3aed, #db2777 46%, #f97316)', desc: '紫粉橙渐变 + 白卡彩影' },
   { id: 'mono', name: '极简黑白', swatch: 'linear-gradient(135deg, #0a0a0a 55%, #d4ff4f)', desc: '纯黑 + 酸性绿,克制锐利' },
 ]

@@ -44,7 +44,11 @@
 }
 
 /* ---- 1. 极光玻璃(毛玻璃 + 多色极光底) ---- */
-[data-theme='aurora'] {
+[data-theme='aurora'],
+[data-theme='aurora-emerald'],
+[data-theme='aurora-sunset'],
+[data-theme='aurora-ice'],
+[data-theme='aurora-gold'] {
   --bg: #070b1c;
   --card: rgba(255, 255, 255, 0.055);
   --line: rgba(255, 255, 255, 0.16);
@@ -56,10 +60,9 @@
   --warn: #fbbf24;
   --bad: #fb7185;
   --body-bg:
-    radial-gradient(900px 620px at 6% -12%, #7c3aed 0%, transparent 62%),
-    radial-gradient(820px 620px at 96% 6%, #0ea5e9 0%, transparent 56%),
-    radial-gradient(760px 720px at 50% 112%, #14b8a6 0%, transparent 60%),
-    linear-gradient(165deg, #05070f 0%, #0a0f22 55%, #060a18 100%);
+    radial-gradient(1900px 1300px at -12% -30%, rgba(124, 58, 237, 0.62) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(6, 182, 212, 0.5) 0%, transparent 58%),
+    linear-gradient(170deg, #05070f 0%, #0a0f22 55%, #060a18 100%);
   --r-card: 22px;
   --r-ctl: 16px;
   --r-tab: 999px;
@@ -881,14 +884,14 @@ body {
 }
 
 /* —— 极光玻璃:导航胶囊 + 玻璃气泡 —— */
-[data-theme='aurora'] .app-tabs button.is-on {
+[data-theme^='aurora'] .app-tabs button.is-on {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
 }
-[data-theme='aurora'] .bubble {
+[data-theme^='aurora'] .bubble {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
-[data-theme='aurora'] .quick button {
+[data-theme^='aurora'] .quick button {
   background: rgba(255, 255, 255, 0.07);
 }
 
@@ -1045,7 +1048,11 @@ body {
   --img-label: #c9cff0;
 }
 
-[data-theme='aurora'] {
+[data-theme='aurora'],
+[data-theme='aurora-emerald'],
+[data-theme='aurora-sunset'],
+[data-theme='aurora-ice'],
+[data-theme='aurora-gold'] {
   --img-bg1: #131a3c;
   --img-bg2: #070b1c;
   --img-fg: #f2f4ff;
@@ -1171,4 +1178,65 @@ body {
   --tab-active-bd: #7b3f6e;
   --img-bg1: #faf6f9;
   --img-bg2: #f0e6ee;
+}
+
+/* ============ 极光系列配色(结构复用 [data-theme^='aurora'],大团柔光对角舒展) ============ */
+/* 1. 翡翠:青绿蓝 */
+[data-theme='aurora-emerald'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(5, 150, 105, 0.6) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(8, 145, 178, 0.52) 0%, transparent 58%),
+    linear-gradient(170deg, #02110e 0%, #05201c 55%, #031417 100%);
+  --accent: #5eead4;
+  --accent-2: #86efac;
+  --bar-pos: #5eead4;
+  --bar-neg: #60a5fa;
+  --btn-bg: linear-gradient(135deg, #059669, #0ea5e9);
+  --img-bg1: #05201c;
+  --img-bg2: #031417;
+}
+
+/* 2. 暮霞:紫粉橙 */
+[data-theme='aurora-sunset'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(217, 70, 239, 0.58) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(249, 115, 22, 0.5) 0%, transparent 58%),
+    linear-gradient(170deg, #12061a 0%, #1f0a1e 55%, #180910 100%);
+  --accent: #fb7185;
+  --accent-2: #fbbf24;
+  --bar-pos: #fb7185;
+  --bar-neg: #fbbf24;
+  --btn-bg: linear-gradient(135deg, #d946ef, #f97316);
+  --img-bg1: #1f0a1e;
+  --img-bg2: #180910;
+}
+
+/* 3. 极地:冰青靛 */
+[data-theme='aurora-ice'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(103, 232, 249, 0.45) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(129, 140, 248, 0.5) 0%, transparent 58%),
+    linear-gradient(170deg, #04101c 0%, #061726 55%, #050a1a 100%);
+  --accent: #a5f3fc;
+  --accent-2: #93c5fd;
+  --bar-pos: #67e8f9;
+  --bar-neg: #c4b5fd;
+  --btn-bg: linear-gradient(135deg, #0891b2, #6366f1);
+  --img-bg1: #061726;
+  --img-bg2: #050a1a;
+}
+
+/* 4. 流金:琥珀玫 */
+[data-theme='aurora-gold'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(245, 158, 11, 0.5) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(251, 113, 133, 0.45) 0%, transparent 58%),
+    linear-gradient(170deg, #160d03 0%, #1d110a 55%, #180c12 100%);
+  --accent: #fbbf24;
+  --accent-2: #fdba74;
+  --bar-pos: #fbbf24;
+  --bar-neg: #fb7185;
+  --btn-bg: linear-gradient(135deg, #f59e0b, #be123c);
+  --img-bg1: #1d110a;
+  --img-bg2: #180c12;
 }
