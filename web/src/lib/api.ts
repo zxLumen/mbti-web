@@ -55,3 +55,47 @@ export const api = {
   saveSettings: (s: Partial<AppSettings> & { apiKey?: string }) =>
     post<{ ok?: boolean; hasKey?: boolean; error?: string; message?: string }>('/api/settings', s),
 }
+
+export interface StreamHandlers {
+  onStart?: () => void
+  onDelta?: (text: string) => void
+  onEnd?: (payload: TurnResp) => void
+}
+
+/** 消费 SSE 流:start / delta / end(含完整 payload)。返回是否正常结束 */
+export async function streamTurn(url: string, body: unknown, h: StreamHandlers): Promise<boolean> {
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!r.ok || !r.body) return false
+    const reader = r.body.getReader()
+    const dec = new TextDecoder()
+    let buf = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += dec.decode(value, { stream: true })
+      let idx
+      while ((idx = buf.indexOf('\n\n')) >= 0) {
+        const chunk = buf.slice(0, idx)
+        buf = buf.slice(idx + 2)
+        const line = chunk.split('\n').find((l) => l.startsWith('data:'))
+        if (!line) continue
+        try {
+          const evt = JSON.parse(line.slice(5).trim()) as { type: string; text?: string; payload?: TurnResp }
+          if (evt.type === 'start') h.onStart?.()
+          else if (evt.type === 'delta') h.onDelta?.(evt.text || '')
+          else if (evt.type === 'end' && evt.payload) h.onEnd?.(evt.payload)
+        } catch {
+          /* 跳过不完整行 */
+        }
+      }
+    }
+    return true
+  } catch {
+    return false
+  }
+}

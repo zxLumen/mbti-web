@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, type Progress, type Tendency } from '../lib/api.js'
+import { api, streamTurn, type Progress, type Tendency, type TurnResp } from '../lib/api.js'
 import { Result } from './Result.js'
 
 export function TestPage() {
@@ -7,19 +7,32 @@ export function TestPage() {
   const [msgs, setMsgs] = useState<Array<{ role: 'ai' | 'user'; text: string }>>([])
   const [input, setInput] = useState('')
   const [hints, setHints] = useState<string[]>([])
-  const [degraded, setDegraded] = useState(false)
   const [progress, setProgress] = useState<Progress>({ qCount: 0, minQ: 12, maxQ: 30 })
   const [thinking, setThinking] = useState(false)
+  const [streamText, setStreamText] = useState<string | null>(null)
+  const [degraded, setDegraded] = useState(false)
   const [done, setDone] = useState(false)
   const [resultCode, setResultCode] = useState('')
   const [summary, setSummary] = useState('')
   const [tendencies, setTendencies] = useState<Tendency[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const streamRef = useRef('')
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [msgs, thinking])
+  }, [msgs, thinking, streamText])
+
+  const beginStream = () => {
+    streamRef.current = ''
+    setStreamText('')
+    setThinking(false)
+  }
+  const pushDelta = (t: string) => {
+    setThinking(false)
+    streamRef.current += t
+    setStreamText(streamRef.current)
+  }
 
   const start = async () => {
     setDone(false)
@@ -28,13 +41,26 @@ export function TestPage() {
     setTendencies([])
     setMsgs([])
     setHints([])
+    setDegraded(false)
     setThinking(true)
-    const r = await api.start()
-    setSessionId(r.sessionId || '')
-    setProgress(r.progress)
-    if (r.message) setMsgs([{ role: 'ai', text: r.message }])
-    setHints(r.hints || [])
-    setDegraded(Boolean(r.degraded))
+    streamRef.current = ''
+    setStreamText(null)
+    await streamTurn('/api/mbti/start', {}, {
+      onStart: beginStream,
+      onDelta: pushDelta,
+      onEnd: (p: TurnResp) => {
+        const full = streamRef.current
+        setStreamText(null)
+        streamRef.current = ''
+        setSessionId(p.sessionId || '')
+        const text = full || p.message || ''
+        if (text) setMsgs([{ role: 'ai', text }])
+        setHints(p.hints || [])
+        if (p.progress) setProgress(p.progress)
+        setDegraded(Boolean(p.degraded))
+        setThinking(false)
+      },
+    })
     setThinking(false)
     setTimeout(() => inputRef.current?.focus(), 50)
   }
@@ -50,19 +76,30 @@ export function TestPage() {
     setInput('')
     setHints([])
     setThinking(true)
-    const r = await api.answer(sessionId, t)
-    setProgress(r.progress)
-    if (r.done) {
-      setDone(true)
-      setResultCode(r.resultCode || '')
-      setSummary(r.summary || '')
-      setTendencies(r.tendencies || [])
-      await api.stats({ type: 'done', code: r.resultCode })
-    } else {
-      if (r.message) setMsgs((m) => [...m, { role: 'ai', text: r.message as string }])
-      setHints(r.hints || [])
-      setDegraded(Boolean(r.degraded))
-    }
+    streamRef.current = ''
+    setStreamText(null)
+    await streamTurn('/api/mbti/answer', { sessionId, text: t }, {
+      onStart: beginStream,
+      onDelta: pushDelta,
+      onEnd: (p: TurnResp) => {
+        const full = streamRef.current
+        setStreamText(null)
+        streamRef.current = ''
+        if (p.progress) setProgress(p.progress)
+        if (p.done) {
+          setDone(true)
+          setResultCode(p.resultCode || '')
+          setSummary(p.summary || full)
+          setTendencies(p.tendencies || [])
+          api.stats({ type: 'done', code: p.resultCode })
+        } else {
+          setMsgs((m) => [...m, { role: 'ai', text: full || p.message || '' }])
+          setHints(p.hints || [])
+          setDegraded(Boolean(p.degraded))
+        }
+        setThinking(false)
+      },
+    })
     setThinking(false)
     setTimeout(() => inputRef.current?.focus(), 50)
   }
@@ -92,7 +129,8 @@ export function TestPage() {
                 {m.text}
               </div>
             ))}
-            {thinking && <div className="bubble ai">我想想…</div>}
+            {streamText !== null && <div className="bubble ai">{streamText || '…'}</div>}
+            {thinking && streamText === null && <div className="bubble ai">我想想…</div>}
           </div>
           <div className="card">
             {hints.length > 0 && (

@@ -179,6 +179,132 @@ async function callLLMJson(system, user, { temperature, maxTokens } = {}) {
   return res.ok ? res.value : null
 }
 
+// ---------- 流式(SSE) ----------
+
+/** 从（可能不完整的）JSON 文本里增量取出某个字符串字段的值 */
+function extractField(raw, field) {
+  const re = new RegExp('"' + field + '"\\s*:\\s*"')
+  const m = raw.match(re)
+  if (!m) return ''
+  let i = m.index + m[0].length
+  let out = ''
+  while (i < raw.length) {
+    const c = raw[i]
+    if (c === '\\') {
+      const n = raw[i + 1]
+      out += n === 'n' ? '\n' : n === 't' ? '\t' : n === '"' ? '"' : n === '\\' ? '\\' : n || ''
+      i += 2
+      continue
+    }
+    if (c === '"') break
+    out += c
+    i++
+  }
+  return out
+}
+
+/** 调网关的流式接口,边收边把 `field` 字段的增量文本回调出去;返回完整 content */
+async function streamAttempt(system, user, { temperature, maxTokens, field }, onDelta) {
+  const ep = await resolveEndpoint()
+  if (!ep) return null
+  const { settings } = ep
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 90000)
+  try {
+    const r = await fetch(ep.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: ep.apiKey ? `Bearer ${ep.apiKey}` : '' },
+      body: JSON.stringify({
+        model: settings.model || 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        temperature: temperature ?? Number(settings.temperature ?? 0.6),
+        max_tokens: maxTokens ?? Number(settings.maxTokens ?? 2048),
+        response_format: { type: 'json_object' },
+        stream: true,
+      }),
+      signal: ctrl.signal,
+    })
+    if (!r.ok || !r.body) {
+      console.warn('[mbti] stream HTTP', r.status)
+      return null
+    }
+    const reader = r.body.getReader()
+    const dec = new TextDecoder()
+    let buf = ''
+    let content = ''
+    let last = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += dec.decode(value, { stream: true })
+      let idx
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx).trim()
+        buf = buf.slice(idx + 1)
+        if (!line.startsWith('data:')) continue
+        const ds = line.slice(5).trim()
+        if (!ds || ds === '[DONE]') continue
+        try {
+          const j = JSON.parse(ds)
+          const d = j.choices?.[0]?.delta?.content
+          if (d) content += d
+        } catch {
+          /* 跳过不完整的行 */
+        }
+      }
+      if (content.length !== last) {
+        last = content.length
+        const partial = extractField(content, field)
+        if (partial) onDelta(partial)
+      }
+    }
+    return content
+  } catch (e) {
+    console.warn('[mbti] stream 异常:', e?.message || e)
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** 若一个字符都没收到就失败,则加倍预算重试一次;已产生输出则不重试(避免重复) */
+async function streamLLM(system, user, opts, onDelta) {
+  let emitted = false
+  const wrap = (t) => {
+    emitted = true
+    onDelta(t)
+  }
+  const first = await streamAttempt(system, user, opts, wrap)
+  if (first || emitted) return first
+  const bigger = { ...opts, maxTokens: Math.min((opts.maxTokens || 2048) * 2, 8192) }
+  return streamAttempt(system, user, bigger, wrap)
+}
+
+function sseInit(res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  })
+}
+function sseSend(res, obj) {
+  res.write('data: ' + JSON.stringify(obj) + '\n\n')
+}
+function deltaSink(res) {
+  let started = false
+  return (txt) => {
+    if (!started) {
+      sseSend(res, { type: 'start' })
+      started = true
+    }
+    sseSend(res, { type: 'delta', text: txt })
+  }
+}
+
 // ---------- 场景生成 ----------
 
 /** 无模型降级:直接把参照题库题当场景(带 A/B) */
@@ -213,6 +339,34 @@ async function genScenario(args) {
     reply: raw.reply.trim(),
     hints,
     domain: typeof raw.domain === 'string' ? raw.domain.slice(0, 12) : '',
+    degraded: false,
+  }
+}
+
+/** 流式版场景生成:把 reply 边生成边推给前端 */
+async function genScenarioStream(probe, args, onDelta) {
+  const { settings } = await loadSettings()
+  const content = await streamLLM(
+    SCENARIO_SYSTEM,
+    scenarioUserPrompt({
+      dim: probe.dim,
+      mode: args.mode,
+      recentDomains: args.recentDomains || [],
+      recent: args.recent || [],
+      lastAnswer: args.lastAnswer,
+    }),
+    { temperature: 0.85, maxTokens: Math.max(Number(settings.maxTokens || 2048), 1600), field: 'reply' },
+    onDelta,
+  )
+  const parsed = content ? extractJson(content) : null
+  if (!parsed || typeof parsed.reply !== 'string' || !parsed.reply.trim()) return fallbackScenario(probe)
+  const hints = Array.isArray(parsed.hints)
+    ? parsed.hints.filter((h) => typeof h === 'string' && h.trim()).slice(0, 2)
+    : []
+  return {
+    reply: parsed.reply.trim(),
+    hints,
+    domain: typeof parsed.domain === 'string' ? parsed.domain.slice(0, 12) : '',
     degraded: false,
   }
 }
@@ -279,6 +433,19 @@ async function genResult(code, themes) {
   return TYPE_BLURB[code] || '你的回答里藏着一套属于自己的方式。愿它帮你更温柔地理解自己。'
 }
 
+/** 流式版结果解读:把 summary 边生成边推给前端 */
+async function genResultStream(code, themes, onDelta) {
+  const content = await streamLLM(
+    RESULT_SYSTEM.replace('{CODE}', code),
+    resultUserPrompt({ themes }),
+    { temperature: 0.8, maxTokens: 1600, field: 'summary' },
+    onDelta,
+  )
+  const parsed = content ? extractJson(content) : null
+  if (parsed && typeof parsed.summary === 'string' && parsed.summary.trim()) return parsed.summary.trim()
+  return TYPE_BLURB[code] || '你的回答里藏着一套属于自己的方式。愿它帮你更温柔地理解自己。'
+}
+
 // ---------- 路由 ----------
 
 app.post('/api/mbti/start', async (_req, res) => {
@@ -287,12 +454,20 @@ app.post('/api/mbti/start', async (_req, res) => {
   const probe = pickProbe(s, MBTI_BANK)
   sessions.set(id, s)
   stats.start++
-  if (!probe) return res.json({ sessionId: id, message: '你好，我们可以慢慢聊聊。', hints: [], progress: progressOf(s), conf: s.conf, degraded: false })
-  const g = await genScenario({ probe, mode: 'opening', recentDomains: [], recent: [] })
+  sseInit(res)
+  if (!probe) {
+    sseSend(res, { type: 'end', payload: { sessionId: id, message: '你好，我们可以慢慢聊聊。', hints: [], progress: progressOf(s), conf: s.conf, degraded: false } })
+    return res.end()
+  }
+  const g = await genScenarioStream(probe, { mode: 'opening', recentDomains: [], recent: [] }, deltaSink(res))
   s.currentPrompt = g.reply
   s.currentHints = g.hints
   if (g.domain) s.recentDomains.push(g.domain)
-  res.json({ sessionId: id, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded })
+  sseSend(res, {
+    type: 'end',
+    payload: { sessionId: id, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded },
+  })
+  res.end()
 })
 
 app.post('/api/mbti/answer', async (req, res) => {
@@ -303,17 +478,17 @@ app.post('/api/mbti/answer', async (req, res) => {
   const probe = s.currentProbe
   if (!probe) return res.status(500).json({ error: 'no_probe' })
   s.lastAt = now()
+  sseInit(res)
 
   if (shouldClarify(s)) {
     s.clarifying = true
-    const g = await genScenario({
+    const g = await genScenarioStream(
       probe,
-      mode: 'clarify',
-      recentDomains: s.recentDomains,
-      recent: s.recentSummaries,
-      lastAnswer: text,
-    })
-    return res.json({ clarify: true, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded })
+      { mode: 'clarify', recentDomains: s.recentDomains, recent: s.recentSummaries, lastAnswer: text },
+      deltaSink(res),
+    )
+    sseSend(res, { type: 'end', payload: { clarify: true, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded } })
+    return res.end()
   }
 
   const score = await classifyAnswer({ dim: probe.dim, scenario: s.currentPrompt, probe, answer: text })
@@ -327,32 +502,28 @@ app.post('/api/mbti/answer', async (req, res) => {
     s.resultCode = computeType(s)
     stats.done++
     stats.perCode[s.resultCode] = (stats.perCode[s.resultCode] || 0) + 1
-    const summary = await genResult(s.resultCode, s.recentSummaries)
-    return res.json({
-      done: true,
-      resultCode: s.resultCode,
-      summary,
-      tendencies: tendencies(s),
-      progress: progressOf(s),
-      conf: s.conf,
+    const summary = await genResultStream(s.resultCode, s.recentSummaries, deltaSink(res))
+    sseSend(res, {
+      type: 'end',
+      payload: { done: true, resultCode: s.resultCode, summary, tendencies: tendencies(s), progress: progressOf(s), conf: s.conf },
     })
+    return res.end()
   }
 
   const next = pickProbe(s, MBTI_BANK)
-  const g = await genScenario({
-    probe: next,
-    mode: 'next',
-    recentDomains: s.recentDomains,
-    recent: s.recentSummaries,
-    lastAnswer: text,
-  })
+  const g = await genScenarioStream(
+    next,
+    { mode: 'next', recentDomains: s.recentDomains, recent: s.recentSummaries, lastAnswer: text },
+    deltaSink(res),
+  )
   s.currentPrompt = g.reply
   s.currentHints = g.hints
   if (g.domain) {
     s.recentDomains.push(g.domain)
     if (s.recentDomains.length > 3) s.recentDomains.shift()
   }
-  res.json({ message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded })
+  sseSend(res, { type: 'end', payload: { message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded } })
+  res.end()
 })
 
 app.post('/api/mbti/reset', (req, res) => {
