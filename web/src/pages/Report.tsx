@@ -76,20 +76,33 @@ async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
   const font = (size: number, weight = 400) =>
     `${weight} ${size}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif`
 
+  // 跟随主题 token
+  const cs = getComputedStyle(document.documentElement)
+  const v = (n: string, fb: string) => cs.getPropertyValue(n).trim() || fb
+  const bg1 = v('--img-bg1', '#141a38')
+  const bg2 = v('--img-bg2', '#0b1020')
+  const fg = v('--img-fg', '#e6e9f5')
+  const dim = v('--img-dim', '#8f96c8')
+  const lbl = v('--img-label', '#c9cff0')
+  const barPos = v('--bar-pos', '#7aa2ff')
+  const barNeg = v('--bar-neg', '#f472b6')
+  const barTrack = v('--bar-track', '#232a4f')
+  const barMid = v('--bar-mid', '#3a4270')
+
   const g = ctx.createLinearGradient(0, 0, W, H)
-  g.addColorStop(0, '#141a38')
-  g.addColorStop(1, '#0b1020')
+  g.addColorStop(0, bg1)
+  g.addColorStop(1, bg2)
   ctx.fillStyle = g
   ctx.fillRect(0, 0, W, H)
   const rg = ctx.createRadialGradient(W * 0.28, 0, 0, W * 0.28, 0, W * 0.95)
-  rg.addColorStop(0, hexA(accent, 0.28))
+  rg.addColorStop(0, hexA(accent, 0.26))
   rg.addColorStop(1, hexA(accent, 0))
   ctx.fillStyle = rg
   ctx.fillRect(0, 0, W, H)
 
   const PAD = 72
   ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = '#8f96c8'
+  ctx.fillStyle = dim
   ctx.font = font(26, 600)
   ctx.fillText('心语 · 对话式 MBTI 测评', PAD, 96)
 
@@ -113,10 +126,10 @@ async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
   const TYPE_Y = 410
   const CODE_Y = 612
   const NAME_Y = 676
-  ctx.fillStyle = '#c9cff0'
+  ctx.fillStyle = lbl
   ctx.font = font(30, 500)
   ctx.fillText('我的性格类型', PAD, TYPE_Y)
-  ctx.fillStyle = '#ffffff'
+  ctx.fillStyle = fg
   ctx.font = font(190, 800)
   ctx.fillText(e.code || '—', PAD - 6, CODE_Y)
   if (meta) {
@@ -136,27 +149,27 @@ async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
     const domLabel = dom === 'pos' ? t.posLabel : t.negLabel
     const magPct = Math.round(50 + Math.abs(v) * 50)
     const pctText = magPct >= 90 ? '≥90%' : magPct <= 10 ? '≤10%' : magPct + '%'
-    ctx.fillStyle = '#c9cff0'
+    ctx.fillStyle = lbl
     ctx.font = font(28, 600)
     ctx.textAlign = 'right'
     ctx.fillText(t.posLabel, barX - 20, y + 8)
     ctx.textAlign = 'left'
     ctx.fillText(t.negLabel, barX + barW + 20, y + 8)
     // 轨道
-    ctx.fillStyle = '#232a4f'
+    ctx.fillStyle = barTrack
     roundRect(ctx, barX, y - 10, barW, 22, 11)
     ctx.fill()
     // 中心分割填充
     const segW = (barW * Math.abs(v)) / 2
-    ctx.fillStyle = dom === 'pos' ? '#7aa2ff' : '#f472b6'
+    ctx.fillStyle = dom === 'pos' ? barPos : barNeg
     if (dom === 'pos') roundRect(ctx, midX - segW, y - 10, segW, 22, 11)
     else roundRect(ctx, midX, y - 10, segW, 22, 11)
     ctx.fill()
     // 中心线
-    ctx.fillStyle = '#3a4270'
+    ctx.fillStyle = barMid
     ctx.fillRect(midX - 1, y - 14, 2, 30)
     // 说明(条下方)
-    ctx.fillStyle = '#8f96c8'
+    ctx.fillStyle = dim
     ctx.font = font(24, 600)
     ctx.textAlign = 'left'
     ctx.fillText(`${domLabel} · ${strengthWord(v)} ${pctText}`, barX, y + 42)
@@ -165,7 +178,7 @@ async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
 
   // 解读
   ctx.textAlign = 'left'
-  ctx.fillStyle = '#e6e9f5'
+  ctx.fillStyle = fg
   ctx.font = font(30, 400)
   y += 46
   const maxW = W - PAD * 2
@@ -175,7 +188,7 @@ async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
     if (y > H - 150) break
   }
 
-  ctx.fillStyle = '#6b72a0'
+  ctx.fillStyle = dim
   ctx.font = font(24, 500)
   ctx.fillText('https://mbti.zxlumen.cn', PAD, H - 64)
   ctx.textAlign = 'right'
@@ -308,7 +321,10 @@ export function Report({
           <details key={e.at} className="report-item" open={i === 0}>
             <summary>
               <span className="report-sum-left">
-                <span className="report-emoji">{meta?.emoji || '·'}</span>
+                <span
+                  className="report-dot"
+                  style={{ background: meta ? meta.color : 'var(--accent)' }}
+                />
                 <b className="report-code">{e.code || '—'}</b>
                 {meta && (
                   <span className="report-name">

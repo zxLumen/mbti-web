@@ -43,22 +43,27 @@ export function Settings() {
 
   return (
     <div className="settings card">
-      <h1>模型设置</h1>
+      <h1>设置</h1>
       <div className="field">
-        <label>主题风格（立即生效，仅本机）</label>
-        <select
-          value={theme}
-          onChange={(e) => {
-            setTheme(e.target.value)
-            saveTheme(e.target.value)
-          }}
-        >
+        <label>界面主题（立即生效，仅本机）</label>
+        <div className="theme-grid">
           {THEMES.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
+            <button
+              key={t.id}
+              type="button"
+              className={`theme-tile${theme === t.id ? ' on' : ''}`}
+              onClick={() => {
+                setTheme(t.id)
+                saveTheme(t.id)
+              }}
+              title={t.desc}
+            >
+              <span className="theme-swatch" style={{ background: t.swatch }} />
+              <span className="theme-name">{t.name}</span>
+              <span className="theme-desc">{t.desc}</span>
+            </button>
           ))}
-        </select>
+        </div>
       </div>
       {!isOwner && (
         <p className="settings-readonly">当前为只读视图 · 仅站长可修改</p>
