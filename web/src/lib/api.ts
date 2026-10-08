@@ -64,18 +64,40 @@ export const api = {
 export interface StreamHandlers {
   onStart?: () => void
   onDelta?: (text: string) => void
+  onPing?: () => void
   onEnd?: (payload: TurnResp) => void
+  onError?: (reason: string) => void
 }
 
-/** 消费 SSE 流:start / delta / end(含完整 payload)。返回是否正常结束 */
-export async function streamTurn(url: string, body: unknown, h: StreamHandlers): Promise<boolean> {
+/**
+ * 消费 SSE 流:start / delta / ping / end。
+ * 带 60s 看门狗:每收到一个事件(含 ping)就重置;超时或无 end 即回调 onError。
+ */
+export async function streamTurn(
+  url: string,
+  body: unknown,
+  h: StreamHandlers,
+  { timeoutMs = 60000 }: { timeoutMs?: number } = {},
+): Promise<boolean> {
+  const ctrl = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const arm = () => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  }
+  let ended = false
   try {
+    arm()
     const r = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: ctrl.signal,
     })
-    if (!r.ok || !r.body) return false
+    if (!r.ok || !r.body) {
+      h.onError?.('http')
+      return false
+    }
     const reader = r.body.getReader()
     const dec = new TextDecoder()
     let buf = ''
@@ -83,7 +105,7 @@ export async function streamTurn(url: string, body: unknown, h: StreamHandlers):
       const { done, value } = await reader.read()
       if (done) break
       buf += dec.decode(value, { stream: true })
-      let idx
+      let idx: number
       while ((idx = buf.indexOf('\n\n')) >= 0) {
         const chunk = buf.slice(0, idx)
         buf = buf.slice(idx + 2)
@@ -91,16 +113,26 @@ export async function streamTurn(url: string, body: unknown, h: StreamHandlers):
         if (!line) continue
         try {
           const evt = JSON.parse(line.slice(5).trim()) as { type: string; text?: string; payload?: TurnResp }
+          arm()
           if (evt.type === 'start') h.onStart?.()
           else if (evt.type === 'delta') h.onDelta?.(evt.text || '')
-          else if (evt.type === 'end' && evt.payload) h.onEnd?.(evt.payload)
+          else if (evt.type === 'ping') h.onPing?.()
+          else if (evt.type === 'end' && evt.payload) {
+            ended = true
+            if (timer) clearTimeout(timer)
+            h.onEnd?.(evt.payload)
+          }
         } catch {
           /* 跳过不完整行 */
         }
       }
     }
+    if (!ended) h.onError?.('incomplete')
     return true
-  } catch {
+  } catch (e) {
+    h.onError?.((e as { name?: string })?.name === 'AbortError' ? 'timeout' : 'network')
     return false
+  } finally {
+    if (timer) clearTimeout(timer)
   }
 }

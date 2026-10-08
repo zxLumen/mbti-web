@@ -137,6 +137,12 @@ export function TestPage() {
         setDegraded(Boolean(p.degraded))
         setThinking(false)
       },
+      onError: () => {
+        setThinking(false)
+        setStreamText(null)
+        streamRef.current = ''
+        setMsgs([{ role: 'ai', text: '（刚才没接上，刷新一下页面再试，或点「重新开始」）' }])
+      },
     })
     setThinking(false)
     setTimeout(() => inputRef.current?.focus(), 50)
@@ -230,6 +236,12 @@ export function TestPage() {
           setDegraded(Boolean(p.degraded))
         }
         setThinking(false)
+      },
+      onError: () => {
+        setThinking(false)
+        setStreamText(null)
+        streamRef.current = ''
+        setMsgs((m) => [...m, { role: 'ai', text: '（刚才没接上，把你刚才的话再发一次就好）' }])
       },
     })
     setThinking(false)

@@ -168,7 +168,7 @@ function reasoningParams(settings) {
 
 async function llmOnce(ep, settings, system, user, tokens, temperature) {
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 30000)
+  const timer = setTimeout(() => ctrl.abort(), 12000)
   try {
     const r = await fetch(ep.url, {
       method: 'POST',
@@ -189,19 +189,20 @@ async function llmOnce(ep, settings, system, user, tokens, temperature) {
     if (!r.ok) {
       const t = await r.text().catch(() => '')
       console.warn('[mbti] LLM HTTP', r.status, t.slice(0, 200))
-      return { ok: false }
+      return { ok: false, reason: 'http' }
     }
     const data = await r.json()
     const content = data?.choices?.[0]?.message?.content || ''
     const parsed = extractJson(content)
     if (!parsed) {
       console.warn('[mbti] LLM 返回无法解析 finish=%s len=%d', data?.choices?.[0]?.finish_reason, content.length)
-      return { ok: false }
+      return { ok: false, reason: 'parse' }
     }
     return { ok: true, value: parsed }
   } catch (e) {
-    console.warn('[mbti] LLM 调用异常:', e?.message || e)
-    return { ok: false }
+    const reason = e?.name === 'AbortError' ? 'timeout' : 'network'
+    console.warn('[mbti] LLM 调用异常:', reason, e?.message || e)
+    return { ok: false, reason }
   } finally {
     clearTimeout(timer)
   }
@@ -214,8 +215,8 @@ async function callLLMJson(system, user, { temperature, maxTokens } = {}) {
   const temp = temperature ?? Number(settings.temperature ?? 0.6)
   const base = maxTokens ?? Number(settings.maxTokens ?? 2048)
   let res = await llmOnce(ep, settings, system, user, base, temp)
-  if (!res.ok) {
-    // 思考型模型可能把预算吃光导致 content 为空 —— 加倍重试一次
+  if (!res.ok && res.reason === 'parse') {
+    // 仅"返回空/无法解析"时加倍预算重试;超时/网络错误不重试
     res = await llmOnce(ep, settings, system, user, Math.min(base * 2, 8192), temp)
   }
   return res.ok ? res.value : null
@@ -248,10 +249,10 @@ function extractField(raw, field) {
 /** 调网关的流式接口,边收边把 `field` 字段的增量文本回调出去;返回完整 content */
 async function streamAttempt(system, user, { temperature, maxTokens, field }, onDelta) {
   const ep = await resolveEndpoint()
-  if (!ep) return null
+  if (!ep) return { ok: false, reason: 'noconfig' }
   const { settings } = ep
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 90000)
+  const timer = setTimeout(() => ctrl.abort(), 40000)
   try {
     const r = await fetch(ep.url, {
       method: 'POST',
@@ -272,7 +273,7 @@ async function streamAttempt(system, user, { temperature, maxTokens, field }, on
     })
     if (!r.ok || !r.body) {
       console.warn('[mbti] stream HTTP', r.status)
-      return null
+      return { ok: false, reason: 'http' }
     }
     const reader = r.body.getReader()
     const dec = new TextDecoder()
@@ -304,16 +305,20 @@ async function streamAttempt(system, user, { temperature, maxTokens, field }, on
         if (partial) onDelta(partial)
       }
     }
-    return content
+    return { ok: true, content }
   } catch (e) {
-    console.warn('[mbti] stream 异常:', e?.message || e)
-    return null
+    const reason = e?.name === 'AbortError' ? 'timeout' : 'network'
+    console.warn('[mbti] stream 异常:', reason, e?.message || e)
+    return { ok: false, reason }
   } finally {
     clearTimeout(timer)
   }
 }
 
-/** 若一个字符都没收到就失败,则加倍预算重试一次;已产生输出则不重试(避免重复) */
+/**
+ * 流式生成。仅当"成功但内容为空"时加倍预算重试一次(思考型模型吃光预算的情形);
+ * 超时/网络错误不重试(避免再等一轮)。返回 { content, reason }。
+ */
 async function streamLLM(system, user, opts, onDelta) {
   let emitted = false
   const wrap = (t) => {
@@ -321,9 +326,13 @@ async function streamLLM(system, user, opts, onDelta) {
     onDelta(t)
   }
   const first = await streamAttempt(system, user, opts, wrap)
-  if (first || emitted) return first
-  const bigger = { ...opts, maxTokens: Math.min((opts.maxTokens || 2048) * 2, 8192) }
-  return streamAttempt(system, user, bigger, wrap)
+  if (first.ok && first.content) return { content: first.content, reason: '' }
+  if (first.ok && !first.content && !emitted) {
+    const bigger = { ...opts, maxTokens: Math.min((opts.maxTokens || 2048) * 2, 8192) }
+    const second = await streamAttempt(system, user, bigger, wrap)
+    return { content: second.ok ? second.content : '', reason: second.reason || 'empty' }
+  }
+  return { content: '', reason: first.reason || 'empty' }
 }
 
 function sseInit(res) {
@@ -333,6 +342,19 @@ function sseInit(res) {
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   })
+  if (typeof res.flushHeaders === 'function') res.flushHeaders()
+}
+
+/** 每几秒发一个 ping,让前端知道连接还活着(也刷新看门狗) */
+function heartbeat(res, ms = 5000) {
+  const t = setInterval(() => {
+    try {
+      sseSend(res, { type: 'ping' })
+    } catch {
+      /* ignore */
+    }
+  }, ms)
+  return () => clearInterval(t)
 }
 function sseSend(res, obj) {
   res.write('data: ' + JSON.stringify(obj) + '\n\n')
@@ -389,7 +411,7 @@ async function genScenario(args) {
 /** 流式版场景生成:把 reply 边生成边推给前端 */
 async function genScenarioStream(probe, args, onDelta) {
   const { settings } = await loadSettings()
-  const content = await streamLLM(
+  const { content } = await streamLLM(
     SCENARIO_SYSTEM,
     scenarioUserPrompt({
       dim: probe.dim,
@@ -478,7 +500,7 @@ async function genResult(code, themes) {
 
 /** 流式版结果解读:把 summary 边生成边推给前端 */
 async function genResultStream(code, themes, onDelta) {
-  const content = await streamLLM(
+  const { content } = await streamLLM(
     RESULT_SYSTEM.replace('{CODE}', code),
     resultUserPrompt({ themes }),
     { temperature: 0.8, maxTokens: 1600, field: 'summary' },
@@ -498,21 +520,34 @@ app.post('/api/mbti/start', async (_req, res) => {
   sessions.set(id, s)
   stats.start++
   sseInit(res)
-  if (!probe) {
-    persistSessions()
-    sseSend(res, { type: 'end', payload: { sessionId: id, message: '你好，我们可以慢慢聊聊。', hints: [], progress: progressOf(s), conf: s.conf, degraded: false } })
-    return res.end()
+  const stopHb = heartbeat(res)
+  let ended = false
+  const finish = (payload) => {
+    if (ended) return
+    ended = true
+    stopHb()
+    try {
+      sseSend(res, { type: 'end', payload })
+    } catch {
+      /* ignore */
+    }
+    res.end()
   }
-  const g = await genScenarioStream(probe, { mode: 'opening', recentDomains: [], recent: [] }, deltaSink(res))
-  s.currentPrompt = g.reply
-  s.currentHints = g.hints
-  if (g.domain) s.recentDomains.push(g.domain)
-  persistSessions()
-  sseSend(res, {
-    type: 'end',
-    payload: { sessionId: id, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded },
-  })
-  res.end()
+  try {
+    if (!probe) {
+      persistSessions()
+      return finish({ sessionId: id, message: '你好，我们可以慢慢聊聊。', hints: [], progress: progressOf(s), conf: s.conf, degraded: false })
+    }
+    const g = await genScenarioStream(probe, { mode: 'opening', recentDomains: [], recent: [] }, deltaSink(res))
+    s.currentPrompt = g.reply
+    s.currentHints = g.hints
+    if (g.domain) s.recentDomains.push(g.domain)
+    persistSessions()
+    finish({ sessionId: id, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded })
+  } catch (e) {
+    console.warn('[mbti] start 异常:', e?.message || e)
+    finish({ sessionId: id, message: '你好，我们可以慢慢聊聊。', hints: [], progress: progressOf(s), conf: s.conf, degraded: true })
+  }
 })
 
 app.post('/api/mbti/answer', async (req, res) => {
@@ -524,57 +559,76 @@ app.post('/api/mbti/answer', async (req, res) => {
   if (!probe) return res.status(500).json({ error: 'no_probe' })
   s.lastAt = now()
   sseInit(res)
+  const stopHb = heartbeat(res)
+  let ended = false
+  const finish = (payload) => {
+    if (ended) return
+    ended = true
+    stopHb()
+    try {
+      sseSend(res, { type: 'end', payload })
+    } catch {
+      /* ignore */
+    }
+    res.end()
+  }
+  try {
+    if (shouldClarify(s)) {
+      s.clarifying = true
+      const g = await genScenarioStream(
+        probe,
+        { mode: 'clarify', recentDomains: s.recentDomains, recent: s.recentSummaries, lastAnswer: text },
+        deltaSink(res),
+      )
+      s.currentHints = g.hints
+      persistSessions()
+      return finish({ clarify: true, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded })
+    }
 
-  if (shouldClarify(s)) {
-    s.clarifying = true
+    const score = await classifyAnswer({ dim: probe.dim, scenario: s.currentPrompt, probe, answer: text })
+    applyAnswer(s, probe, score)
+    stats.answer++
+    s.recentSummaries.push(`第${s.qCount}轮（${DIM_INFO[probe.dim].topic}）：${(text || '').slice(0, 40)}`)
+    if (s.recentSummaries.length > 3) s.recentSummaries.shift()
+
+    if (canEnd(s)) {
+      s.done = true
+      s.resultCode = computeType(s)
+      stats.done++
+      stats.perCode[s.resultCode] = (stats.perCode[s.resultCode] || 0) + 1
+      const summary = await genResultStream(s.resultCode, s.recentSummaries, deltaSink(res))
+      s.resultSummary = summary
+      s.resultTendencies = tendencies(s)
+      persistSessions()
+      return finish({
+        done: true,
+        resultCode: s.resultCode,
+        summary,
+        tendencies: s.resultTendencies,
+        progress: progressOf(s),
+        conf: s.conf,
+      })
+    }
+
+    const next = pickProbe(s, MBTI_BANK)
     const g = await genScenarioStream(
-      probe,
-      { mode: 'clarify', recentDomains: s.recentDomains, recent: s.recentSummaries, lastAnswer: text },
+      next,
+      { mode: 'next', recentDomains: s.recentDomains, recent: s.recentSummaries, lastAnswer: text },
       deltaSink(res),
     )
+    s.currentPrompt = g.reply
     s.currentHints = g.hints
+    if (g.domain) {
+      s.recentDomains.push(g.domain)
+      if (s.recentDomains.length > 3) s.recentDomains.shift()
+    }
     persistSessions()
-    sseSend(res, { type: 'end', payload: { clarify: true, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded } })
-    return res.end()
-  }
-
-  const score = await classifyAnswer({ dim: probe.dim, scenario: s.currentPrompt, probe, answer: text })
-  applyAnswer(s, probe, score)
-  stats.answer++
-  s.recentSummaries.push(`第${s.qCount}轮（${DIM_INFO[probe.dim].topic}）：${(text || '').slice(0, 40)}`)
-  if (s.recentSummaries.length > 3) s.recentSummaries.shift()
-
-  if (canEnd(s)) {
-    s.done = true
-    s.resultCode = computeType(s)
-    stats.done++
-    stats.perCode[s.resultCode] = (stats.perCode[s.resultCode] || 0) + 1
-    const summary = await genResultStream(s.resultCode, s.recentSummaries, deltaSink(res))
-    s.resultSummary = summary
-    s.resultTendencies = tendencies(s)
+    finish({ message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded })
+  } catch (e) {
+    console.warn('[mbti] answer 异常:', e?.message || e)
     persistSessions()
-    sseSend(res, {
-      type: 'end',
-      payload: { done: true, resultCode: s.resultCode, summary, tendencies: s.resultTendencies, progress: progressOf(s), conf: s.conf },
-    })
-    return res.end()
+    finish({ message: '刚才没接上，能再说一次吗？', hints: [], progress: progressOf(s), conf: s.conf, degraded: true })
   }
-
-  const next = pickProbe(s, MBTI_BANK)
-  const g = await genScenarioStream(
-    next,
-    { mode: 'next', recentDomains: s.recentDomains, recent: s.recentSummaries, lastAnswer: text },
-    deltaSink(res),
-  )
-  s.currentPrompt = g.reply
-  s.currentHints = g.hints
-  if (g.domain) {
-    s.recentDomains.push(g.domain)
-    if (s.recentDomains.length > 3) s.recentDomains.shift()
-  }
-  sseSend(res, { type: 'end', payload: { message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded } })
-  persistSessions()
-  res.end()
 })
 
 app.post('/api/mbti/reset', (req, res) => {
