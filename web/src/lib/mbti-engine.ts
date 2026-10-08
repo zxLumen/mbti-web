@@ -1,17 +1,17 @@
-import type { Axis, MbtiQuestion, SessionState } from './mbti-types.js'
+import type { Axis, Dim, DimTendency, MbtiQuestion, Probe, SessionState } from './mbti-types.js'
 
-export const AXES: Axis[] = ['E', 'I', 'S', 'N', 'T', 'F', 'J', 'P']
-
-/** 四个维度,每个含两个极性 */
 export const DIMS: Array<[Axis, Axis]> = [
   ['E', 'I'],
   ['S', 'N'],
   ['T', 'F'],
   ['J', 'P'],
 ]
+export const DIM_KEYS: Dim[] = ['EI', 'SN', 'TF', 'JP']
 
-const OPP: Record<Axis, Axis> = { E: 'I', I: 'E', S: 'N', N: 'S', T: 'F', F: 'T', J: 'P', P: 'J' }
-const DIM_OF: Record<Axis, number> = { E: 0, I: 0, S: 1, N: 1, T: 2, F: 2, J: 3, P: 3 }
+const DIM_OF_AXIS: Record<Axis, Dim> = { E: 'EI', I: 'EI', S: 'SN', N: 'SN', T: 'TF', F: 'TF', J: 'JP', P: 'JP' }
+/** 各维度的正端(分数为 + 时朝向) */
+export const POS: Record<Dim, Axis> = { EI: 'E', SN: 'S', TF: 'T', JP: 'J' }
+export const NEG: Record<Dim, Axis> = { EI: 'I', SN: 'N', TF: 'F', JP: 'P' }
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n))
 
@@ -20,13 +20,17 @@ export function createSession(id: string): SessionState {
     id,
     createdAt: Date.now(),
     lastAt: Date.now(),
-    currentQId: null,
+    currentProbe: null,
+    currentPrompt: '',
+    currentHints: [],
+    recentDomains: [],
+    recentSummaries: [],
     qCount: 0,
     minQ: 12,
     maxQ: 30,
     confT: 0.85,
     scores: { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 },
-    conf: { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 },
+    conf: { EI: 0, SN: 0, TF: 0, JP: 0 },
     history: [],
     done: false,
     clarifying: false,
@@ -34,17 +38,14 @@ export function createSession(id: string): SessionState {
   }
 }
 
-/** 某维度已作答的条目(按时间先后) */
-function dimHistory(s: SessionState, dim: number) {
-  return s.history.filter((h) => DIM_OF[h.axis] === dim)
-}
+const dimOf = (q: MbtiQuestion): Dim => DIM_OF_AXIS[q.axis]
+const dimHistory = (s: SessionState, dim: Dim) => s.history.filter((h) => h.dim === dim)
 
-/** 该维度内回答方向的反转次数(摇摆越多,置信度增长越慢) */
-function dimFlips(s: SessionState, dim: number): number {
+function dimFlips(s: SessionState, dim: Dim): number {
   let flips = 0
   let prev = 0
   for (const h of dimHistory(s, dim)) {
-    const sign = h.cls > 0 ? 1 : h.cls < 0 ? -1 : 0
+    const sign = h.score > 0 ? 1 : h.score < 0 ? -1 : 0
     if (sign === 0) continue
     if (prev !== 0 && sign !== prev) flips++
     prev = sign
@@ -53,26 +54,21 @@ function dimFlips(s: SessionState, dim: number): number {
 }
 
 export function updateConf(s: SessionState): void {
-  for (let d = 0; d < DIMS.length; d++) {
-    const qa = dimHistory(s, d).length
+  for (const dim of DIM_KEYS) {
+    const qa = dimHistory(s, dim).length
     const base = clamp(qa / 5, 0, 1)
-    const consist = clamp(1 - (dimFlips(s, d) / Math.max(1, qa)) * 0.4, 0, 1)
-    const c = clamp(base * (0.6 + 0.4 * consist), 0, 1)
-    // 两端显示同一维度置信度
-    for (const ax of DIMS[d]) s.conf[ax] = c
+    const consist = clamp(1 - (dimFlips(s, dim) / Math.max(1, qa)) * 0.4, 0, 1)
+    s.conf[dim] = clamp(base * (0.6 + 0.4 * consist), 0, 1)
   }
 }
 
-/**
- * 计入用户对某题的归类。
- * `pair` 指明该极性的表述在 A 还是 B：pair='A' 选 A 朝向 axis；pair='B' 选 B 朝向 axis。
- */
-export function applyAnswer(s: SessionState, q: MbtiQuestion, cls: -2 | -1 | 0 | 1 | 2): void {
-  const towards = q.pair === 'A' ? cls : (-cls as -2 | -1 | 0 | 1 | 2)
-  const delta = towards * q.weight
-  s.scores[q.axis] += delta
-  s.scores[OPP[q.axis]] -= delta
-  s.history.push({ qId: q.id, axis: q.axis, cls, w: q.weight })
+/** 记录用户对当前探测点的归类(score 为正=偏该维度正端) */
+export function applyAnswer(s: SessionState, probe: Probe, score: number): void {
+  const sc = Math.max(-2, Math.min(2, Math.round(score)))
+  const delta = sc * probe.weight
+  s.scores[POS[probe.dim]] += delta
+  s.scores[NEG[probe.dim]] -= delta
+  s.history.push({ dim: probe.dim, score: sc, w: probe.weight })
   s.qCount = s.history.length
   s.clarifying = false
   updateConf(s)
@@ -82,12 +78,12 @@ export function applyAnswer(s: SessionState, q: MbtiQuestion, cls: -2 | -1 | 0 |
 export function shouldClarify(s: SessionState): boolean {
   if (s.clarifying) return false
   const r = s.history.slice(-2)
-  return r.length === 2 && r.every((h) => h.cls === 0)
+  return r.length === 2 && r.every((h) => h.score === 0)
 }
 
 export function canEnd(s: SessionState): boolean {
   if (s.qCount >= s.maxQ) return true
-  return s.qCount >= s.minQ && DIMS.every(([a]) => s.conf[a] >= s.confT)
+  return s.qCount >= s.minQ && DIM_KEYS.every((d) => s.conf[d] >= s.confT)
 }
 
 export function computeType(s: SessionState): string {
@@ -96,34 +92,60 @@ export function computeType(s: SessionState): string {
   return code
 }
 
-/** 选下一题：优先置信度最低的维度,再优先该维度里作答较少的极性 */
-export function pickNext(s: SessionState, bank: MbtiQuestion[]): MbtiQuestion | null {
+export function tendencies(s: SessionState): DimTendency[] {
+  const labels: Record<Dim, [string, string]> = {
+    EI: ['外向', '内向'],
+    SN: ['实感', '直觉'],
+    TF: ['思考', '情感'],
+    JP: ['判断', '知觉'],
+  }
+  return DIM_KEYS.map((dim) => {
+    const a = s.scores[POS[dim]]
+    const b = s.scores[NEG[dim]]
+    const denom = Math.abs(a) + Math.abs(b)
+    const strength = denom < 1e-6 ? 0 : (a - b) / denom
+    return {
+      dim,
+      posLabel: labels[dim][0],
+      negLabel: labels[dim][1],
+      posPct: Math.round(clamp(50 + 50 * strength, 0, 100)),
+    }
+  })
+}
+
+/** 选下一个探测点:置信度最低的维度,平衡两端,挑高权重未用题作参照 */
+export function pickProbe(s: SessionState, bank: MbtiQuestion[]): Probe | null {
   const unused = bank.filter((q) => !s.usedIds.has(q.id))
   if (!unused.length) return null
-  let target = 0
+  let target: Dim = DIM_KEYS[0]
   let best = Number.POSITIVE_INFINITY
-  for (let d = 0; d < DIMS.length; d++) {
-    const v = s.conf[DIMS[d][0]]
+  for (const d of DIM_KEYS) {
+    const v = s.conf[d]
     if (v < best - 1e-9) {
       best = v
       target = d
     }
   }
-  let list = unused.filter((q) => DIM_OF[q.axis] === target)
+  let list = unused.filter((q) => dimOf(q) === target)
   if (!list.length) list = unused
-  // 两端平衡:优先作答较少的极性,其次权重高的题
-  const [a, b] = DIMS[target]
-  const na = dimHistory(s, target).filter((h) => h.axis === a).length
-  const nb = dimHistory(s, target).filter((h) => h.axis === b).length
-  const prefer: Axis = na <= nb ? a : b
+  // 平衡:优先作答较少的极性
+  const na = dimHistory(s, target).filter((h) => h.score > 0).length
+  const nb = dimHistory(s, target).filter((h) => h.score < 0).length
   list = [...list].sort((x, y) => {
-    const px = x.axis === prefer ? 0 : 1
-    const py = y.axis === prefer ? 0 : 1
-    if (px !== py) return px - py
+    // 让两端交替:偏向极性作答较少的一方
+    const scoreOf = (q: MbtiQuestion) => {
+      const isPos = q.axis === POS[target]
+      const cnt = isPos ? na : nb
+      return cnt
+    }
+    const dx = scoreOf(x)
+    const dy = scoreOf(y)
+    if (dx !== dy) return dx - dy
     return (y.weight || 1) - (x.weight || 1)
   })
   const q = list[0]
-  s.currentQId = q.id
+  const probe: Probe = { dim: target, refId: q.id, refStem: q.stem, weight: q.weight || 1 }
+  s.currentProbe = probe
   s.usedIds.add(q.id)
-  return q
+  return probe
 }

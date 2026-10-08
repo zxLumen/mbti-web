@@ -1,23 +1,25 @@
 # mbti-web
 
-对话式 MBTI 测评（独立子应用，经应用栏 `panel` 嵌入）。不预设固定题序：通过与用户自然语言
-问答，结合内置专业题库**动态选题**，按四维置信度**逐步收敛**，最后给出 **4 字母** MBTI 类型。
+对话式 MBTI 测评（独立子应用，经应用栏 `panel` 嵌入）。**不照搬题库出题**：把题库当作
+"测量意图的参照"，由大模型**即兴编出有温度的生活场景**与用户自然对话，每轮先承接上一句再
+抛出场景与开放问题（附 2 个软参考词），按四维置信度**逐步收敛**，最后给出 **4 字母**类型 +
+一段温暖的个性化解读。
 
 - 前端：Vite + React + TypeScript
 - 后端：Express（Node 原生 TS 类型擦除运行，无需预编译）
-- AI：OpenAI 兼容（支持博客 AI 网关 `zxGateway` 或自定义），未配置时回退本地规则判断
+- AI：OpenAI 兼容（支持博客 AI 网关 `zxGateway` 或自定义）。**未配置模型时降级为直接展示题库题**
 - 隐私：匿名，**不存对话**；统计只记「开始 / 完成 / 类型」计数
 
 ## 结构
 
 ```
-server.js               Express 服务 + 匿名统计 + 设置读写
+server.js               Express 服务 + 匿名统计 + 设置读写 + 调 LLM(生成场景/判读/结果)
 web/src/lib/
-  mbti-bank.ts          题库（约 120 题,中文,单轴主导）
-  mbti-engine.ts        纯逻辑:选题/置信度/收敛/计算类型
-  prompts.ts            归类用 system prompt
+  mbti-bank.ts          题库(约 120 题;仅作“测量意图的参照”,不直接展示)
+  mbti-engine.ts        纯逻辑:选探测维度/置信度/收敛/计分/计算类型
+  prompts.ts            三份 prompt:场景生成 / 判读 / 结果解读
   api.ts                前端接口封装
-web/src/pages/          TestPage(测评) / Result(结果) / Settings(配置)
+web/src/pages/          TestPage(对话) / Result(结果) / Settings(配置)
 data/                   settings.json + keys.json(本地,已 gitignore)
 ```
 
