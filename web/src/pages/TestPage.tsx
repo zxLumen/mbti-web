@@ -165,7 +165,11 @@ export function TestPage() {
           </div>
         </>
       )}
-      {done && <Result code={resultCode} summary={summary} tendencies={tendencies} onRestart={() => reset()} />}
+      {done && (
+        <div className="result-wrap">
+          <Result code={resultCode} summary={summary} tendencies={tendencies} onRestart={() => reset()} />
+        </div>
+      )}
     </div>
   )
 }
