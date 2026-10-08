@@ -991,52 +991,11 @@ body {
   color: var(--dim);
 }
 
-/* —— 设置页:主题色板 —— */
-.theme-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-}
 
-.theme-tile {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  text-align: left;
-  background: var(--bubble-bg);
-  border: 1px solid var(--line);
-  border-radius: var(--r-ctl);
-  padding: 10px;
-  cursor: pointer;
-  transition: border-color 0.15s, transform 0.12s;
-}
 
-.theme-tile:hover {
-  transform: translateY(-2px);
-}
 
-.theme-tile.on {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
-}
 
-.theme-swatch {
-  height: 46px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-}
 
-.theme-name {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--fg);
-}
-
-.theme-desc {
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--dim);
-}
 
 /* ============ 分享报告图配色(随主题) ============ */
 :root,
@@ -1467,23 +1426,6 @@ body {
   --img-bg2: #140c05;
 }
 
-/* 类型极光提示条 */
-.type-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 14px;
-  border-radius: var(--r-ctl);
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--fg);
-  font-size: 13px;
-}
-
-.type-banner b {
-  letter-spacing: 1px;
-}
 
 /* 报告列表里的插画头像(cover 裁切,偏左取主角色) */
 .mascot-avatar {

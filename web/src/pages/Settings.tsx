@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type AppSettings } from '../lib/api.js'
-import { THEMES, readTheme, saveTheme, readAtype, clearTypeTheme } from '../lib/theme.js'
 
 export function Settings() {
-  const [theme, setTheme] = useState<string>(() => readTheme())
-  const [atype, setAtype] = useState<string>(() => readAtype())
   const [s, setS] = useState<AppSettings>({
     provider: 'zxGateway',
     baseURL: '',
@@ -44,46 +41,7 @@ export function Settings() {
 
   return (
     <div className="settings card">
-      <h1>设置</h1>
-      {atype && (
-        <div className="type-banner">
-          <span>
-            已完成测评，界面已切换为 <b>{atype}</b> 的专属极光配色
-          </span>
-          <button
-            className="link-btn"
-            onClick={() => {
-              clearTypeTheme()
-              setAtype('')
-              setTheme(readTheme())
-            }}
-          >
-            恢复我选择的主题
-          </button>
-        </div>
-      )}
-      <div className="field">
-        <label>界面主题（立即生效，仅本机）</label>
-        <div className="theme-grid">
-          {THEMES.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className={`theme-tile${theme === t.id ? ' on' : ''}`}
-              onClick={() => {
-                setTheme(t.id)
-                setAtype('')
-                saveTheme(t.id)
-              }}
-              title={t.desc}
-            >
-              <span className="theme-swatch" style={{ background: t.swatch }} />
-              <span className="theme-name">{t.name}</span>
-              <span className="theme-desc">{t.desc}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      <h1>模型设置</h1>
       {!isOwner && (
         <p className="settings-readonly">当前为只读视图 · 仅站长可修改</p>
       )}
