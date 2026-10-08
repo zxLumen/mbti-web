@@ -1240,3 +1240,247 @@ body {
   --img-bg1: #1d110a;
   --img-bg2: #180c12;
 }
+
+/* ============ 16 型专属极光配色(完成测评后自动应用) ============ */
+/* INTJ · NT */
+[data-theme='aurora'][data-atype='INTJ'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(124, 58, 237, 0.55) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(14, 165, 233, 0.42) 0%, transparent 58%),
+    linear-gradient(170deg, #0a0821 0%, #08122a 55%, #060a18 100%);
+  --accent: #a78bfa;
+  --accent-2: #c4b5fd;
+  --bar-pos: #a78bfa;
+  --bar-neg: #38bdf8;
+  --btn-bg: linear-gradient(135deg, #7c3aed, #06b6d4);
+  --img-bg1: #08122a;
+  --img-bg2: #060a18;
+}
+/* INTP · NT */
+[data-theme='aurora'][data-atype='INTP'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(109, 40, 217, 0.55) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(34, 211, 238, 0.4) 0%, transparent 58%),
+    linear-gradient(170deg, #0c0621 0%, #071426 55%, #060a18 100%);
+  --accent: #c4b5fd;
+  --accent-2: #ddd6fe;
+  --bar-pos: #c4b5fd;
+  --bar-neg: #f0abfc;
+  --btn-bg: linear-gradient(135deg, #8b5cf6, #06b6d4);
+  --img-bg1: #071426;
+  --img-bg2: #060a18;
+}
+/* ENTJ · NT */
+[data-theme='aurora'][data-atype='ENTJ'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(139, 92, 246, 0.55) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(59, 130, 246, 0.42) 0%, transparent 58%),
+    linear-gradient(170deg, #0a0621 0%, #06122b 55%, #060a18 100%);
+  --accent: #ddd6fe;
+  --accent-2: #c4b5fd;
+  --bar-pos: #ddd6fe;
+  --bar-neg: #93c5fd;
+  --btn-bg: linear-gradient(135deg, #8b5cf6, #2563eb);
+  --img-bg1: #06122b;
+  --img-bg2: #060a18;
+}
+/* ENTP · NT */
+[data-theme='aurora'][data-atype='ENTP'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(167, 139, 250, 0.5) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(6, 182, 212, 0.45) 0%, transparent 58%),
+    linear-gradient(170deg, #0b0823 0%, #051a2b 55%, #060a18 100%);
+  --accent: #c4b5fd;
+  --accent-2: #a5f3fc;
+  --bar-pos: #a78bfa;
+  --bar-neg: #67e8f9;
+  --btn-bg: linear-gradient(135deg, #a78bfa, #0ea5e9);
+  --img-bg1: #051a2b;
+  --img-bg2: #060a18;
+}
+/* INFJ · NF */
+[data-theme='aurora'][data-atype='INFJ'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(4, 120, 87, 0.55) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(13, 148, 136, 0.45) 0%, transparent 58%),
+    linear-gradient(170deg, #02150f 0%, #04211f 55%, #031417 100%);
+  --accent: #6ee7b7;
+  --accent-2: #99f6e4;
+  --bar-pos: #6ee7b7;
+  --bar-neg: #22d3ee;
+  --btn-bg: linear-gradient(135deg, #059669, #14b8a6);
+  --img-bg1: #04211f;
+  --img-bg2: #031417;
+}
+/* INFP · NF */
+[data-theme='aurora'][data-atype='INFP'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(16, 185, 129, 0.55) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(6, 182, 212, 0.42) 0%, transparent 58%),
+    linear-gradient(170deg, #03150f 0%, #042023 55%, #031417 100%);
+  --accent: #6ee7b7;
+  --accent-2: #a7f3d0;
+  --bar-pos: #6ee7b7;
+  --bar-neg: #f0abfc;
+  --btn-bg: linear-gradient(135deg, #10b981, #06b6d4);
+  --img-bg1: #042023;
+  --img-bg2: #031417;
+}
+/* ENFJ · NF */
+[data-theme='aurora'][data-atype='ENFJ'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(13, 148, 136, 0.55) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(34, 197, 94, 0.4) 0%, transparent 58%),
+    linear-gradient(170deg, #03211c 0%, #06240f 55%, #031417 100%);
+  --accent: #5eead4;
+  --accent-2: #86efac;
+  --bar-pos: #5eead4;
+  --bar-neg: #a3e635;
+  --btn-bg: linear-gradient(135deg, #0d9488, #22c55e);
+  --img-bg1: #06240f;
+  --img-bg2: #031417;
+}
+/* ENFP · NF */
+[data-theme='aurora'][data-atype='ENFP'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(52, 211, 153, 0.5) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(14, 165, 233, 0.45) 0%, transparent 58%),
+    linear-gradient(170deg, #04231d 0%, #052131 55%, #031417 100%);
+  --accent: #a7f3d0;
+  --accent-2: #a5f3fc;
+  --bar-pos: #a7f3d0;
+  --bar-neg: #67e8f9;
+  --btn-bg: linear-gradient(135deg, #34d399, #0284c7);
+  --img-bg1: #052131;
+  --img-bg2: #031417;
+}
+/* ISTJ · SJ */
+[data-theme='aurora'][data-atype='ISTJ'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(29, 78, 216, 0.55) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(14, 165, 233, 0.42) 0%, transparent 58%),
+    linear-gradient(170deg, #050f26 0%, #041827 55%, #050d1f 100%);
+  --accent: #93c5fd;
+  --accent-2: #bfdbfe;
+  --bar-pos: #93c5fd;
+  --bar-neg: #38bdf8;
+  --btn-bg: linear-gradient(135deg, #1d4ed8, #0284c7);
+  --img-bg1: #041827;
+  --img-bg2: #050d1f;
+}
+/* ISFJ · SJ */
+[data-theme='aurora'][data-atype='ISFJ'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(37, 99, 235, 0.55) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(99, 102, 241, 0.4) 0%, transparent 58%),
+    linear-gradient(170deg, #060f2a 0%, #080f2c 55%, #050d1f 100%);
+  --accent: #bfdbfe;
+  --accent-2: #c7d2fe;
+  --bar-pos: #bfdbfe;
+  --bar-neg: #a5b4fc;
+  --btn-bg: linear-gradient(135deg, #2563eb, #4f46e5);
+  --img-bg1: #080f2c;
+  --img-bg2: #050d1f;
+}
+/* ESTJ · SJ */
+[data-theme='aurora'][data-atype='ESTJ'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(3, 105, 161, 0.55) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(14, 165, 233, 0.42) 0%, transparent 58%),
+    linear-gradient(170deg, #031322 0%, #04212b 55%, #050d1f 100%);
+  --accent: #7dd3fc;
+  --accent-2: #93c5fd;
+  --bar-pos: #7dd3fc;
+  --bar-neg: #38bdf8;
+  --btn-bg: linear-gradient(135deg, #0369a1, #06b6d4);
+  --img-bg1: #04212b;
+  --img-bg2: #050d1f;
+}
+/* ESFJ · SJ */
+[data-theme='aurora'][data-atype='ESFJ'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(59, 130, 246, 0.5) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(56, 189, 248, 0.45) 0%, transparent 58%),
+    linear-gradient(170deg, #06132b 0%, #062034 55%, #050d1f 100%);
+  --accent: #bfdbfe;
+  --accent-2: #a5f3fc;
+  --bar-pos: #93c5fd;
+  --bar-neg: #67e8f9;
+  --btn-bg: linear-gradient(135deg, #3b82f6, #0ea5e9);
+  --img-bg1: #062034;
+  --img-bg2: #050d1f;
+}
+/* ISTP · SP */
+[data-theme='aurora'][data-atype='ISTP'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(180, 83, 9, 0.55) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(245, 158, 11, 0.4) 0%, transparent 58%),
+    linear-gradient(170deg, #150d03 0%, #1f1507 55%, #140c05 100%);
+  --accent: #fbbf24;
+  --accent-2: #fcd34d;
+  --bar-pos: #fbbf24;
+  --bar-neg: #fdba74;
+  --btn-bg: linear-gradient(135deg, #b45309, #f59e0b);
+  --img-bg1: #1f1507;
+  --img-bg2: #140c05;
+}
+/* ISFP · SP */
+[data-theme='aurora'][data-atype='ISFP'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(245, 158, 11, 0.5) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(251, 146, 60, 0.45) 0%, transparent 58%),
+    linear-gradient(170deg, #1a1004 0%, #20140a 55%, #140c05 100%);
+  --accent: #fcd34d;
+  --accent-2: #fde68a;
+  --bar-pos: #fcd34d;
+  --bar-neg: #fdba74;
+  --btn-bg: linear-gradient(135deg, #f59e0b, #f97316);
+  --img-bg1: #20140a;
+  --img-bg2: #140c05;
+}
+/* ESTP · SP */
+[data-theme='aurora'][data-atype='ESTP'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(234, 88, 12, 0.5) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(250, 204, 21, 0.4) 0%, transparent 58%),
+    linear-gradient(170deg, #1a0f04 0%, #1f1704 55%, #140c05 100%);
+  --accent: #fdba74;
+  --accent-2: #fcd34d;
+  --bar-pos: #fb923c;
+  --bar-neg: #facc15;
+  --btn-bg: linear-gradient(135deg, #ea580c, #facc15);
+  --img-bg1: #1f1704;
+  --img-bg2: #140c05;
+}
+/* ESFP · SP */
+[data-theme='aurora'][data-atype='ESFP'] {
+  --body-bg:
+    radial-gradient(1900px 1300px at -12% -30%, rgba(249, 115, 22, 0.5) 0%, transparent 58%),
+    radial-gradient(1700px 1250px at 112% 128%, rgba(251, 113, 133, 0.45) 0%, transparent 58%),
+    linear-gradient(170deg, #1c0e08 0%, #1f0f16 55%, #140c05 100%);
+  --accent: #fdba74;
+  --accent-2: #fda4af;
+  --bar-pos: #fdba74;
+  --bar-neg: #fda4af;
+  --btn-bg: linear-gradient(135deg, #f97316, #fb7185);
+  --img-bg1: #1f0f16;
+  --img-bg2: #140c05;
+}
+
+/* 类型极光提示条 */
+.type-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--r-ctl);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.type-banner b {
+  letter-spacing: 1px;
+}
