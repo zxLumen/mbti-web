@@ -22,6 +22,8 @@ import {
   scenarioUserPrompt,
   classifyUserPrompt,
   resultUserPrompt,
+  HINTS_SYSTEM,
+  hintsUserPrompt,
 } from './web/src/lib/prompts.ts'
 import { isOwner, ownerToken, ownerCookieHeader } from './web/src/lib/owner.ts'
 
@@ -382,6 +384,10 @@ function deltaSink(res) {
   }
 }
 
+/** 选项个数目标:按轮次在 3/2/4 之间浮动(内容仍由模型决定) */
+const HINT_CYCLE = [3, 2, 4]
+const hintTargetFor = (s) => HINT_CYCLE[(s.qCount || 0) % HINT_CYCLE.length]
+
 // ---------- 场景生成 ----------
 
 /** 无模型降级:直接把参照题库题当场景(带 A/B) */
@@ -405,13 +411,15 @@ async function genScenario(args) {
       recentDomains: args.recentDomains || [],
       recent: args.recent || [],
       lastAnswer: args.lastAnswer,
+      hintTarget: args.hintTarget,
     }),
     { temperature: 0.85, maxTokens: 1600 },
   )
   if (!raw || typeof raw.reply !== 'string' || !raw.reply.trim()) return fallbackScenario(args.probe)
-  const hints = Array.isArray(raw.hints)
+  let hints = Array.isArray(raw.hints)
     ? raw.hints.filter((h) => typeof h === 'string' && h.trim()).slice(0, 4)
     : []
+  if (!hints.length) hints = await genHints(raw.reply.trim(), args.probe.dim, args.hintTarget)
   return {
     reply: raw.reply.trim(),
     hints,
@@ -432,15 +440,17 @@ async function genScenarioStream(probe, args, onDelta) {
       askedScenes: args.askedScenes || [],
       recent: args.recent || [],
       lastAnswer: args.lastAnswer,
+      hintTarget: args.hintTarget,
     }),
     { temperature: 0.85, maxTokens: Math.max(Number(settings.maxTokens || 2048), 1600), field: 'reply' },
     onDelta,
   )
   const parsed = content ? extractJson(content) : null
   if (!parsed || typeof parsed.reply !== 'string' || !parsed.reply.trim()) return fallbackScenario(probe)
-  const hints = Array.isArray(parsed.hints)
+  let hints = Array.isArray(parsed.hints)
     ? parsed.hints.filter((h) => typeof h === 'string' && h.trim()).slice(0, 4)
     : []
+  if (!hints.length) hints = await genHints(parsed.reply.trim(), probe.dim, args.hintTarget)
   return {
     reply: parsed.reply.trim(),
     hints,
@@ -448,6 +458,16 @@ async function genScenarioStream(probe, args, onDelta) {
     scene: typeof parsed.scene === 'string' ? parsed.scene.slice(0, 12) : '',
     degraded: false,
   }
+}
+
+/** 兜底:选项为空时,单独再要一组(不重跑场景,避免重复流式输出) */
+async function genHints(question, dim, hintTarget) {
+  const raw = await callLLMJson(HINTS_SYSTEM, hintsUserPrompt(question, dim, hintTarget), {
+    temperature: 0.6,
+    maxTokens: 400,
+  })
+  const arr = raw && Array.isArray(raw.hints) ? raw.hints : []
+  return arr.filter((h) => typeof h === 'string' && h.trim()).slice(0, 4)
 }
 
 // ---------- 判读 ----------
@@ -552,7 +572,7 @@ app.post('/api/mbti/start', async (_req, res) => {
       persistSessions()
       return finish({ sessionId: id, message: '你好，我们可以慢慢聊聊。', hints: [], progress: progressOf(s), conf: s.conf, degraded: false })
     }
-    const g = await genScenarioStream(probe, { mode: 'opening', recentDomains: [], askedScenes: [], recent: [] }, deltaSink(res))
+    const g = await genScenarioStream(probe, { mode: 'opening', recentDomains: [], askedScenes: [], recent: [], hintTarget: hintTargetFor(s) }, deltaSink(res))
     s.currentPrompt = g.reply
     s.currentHints = g.hints
     rememberScene(s, g)
@@ -591,7 +611,7 @@ app.post('/api/mbti/answer', async (req, res) => {
       s.clarifying = true
       const g = await genScenarioStream(
         probe,
-        { mode: 'clarify', recentDomains: s.recentDomains, askedScenes: s.askedScenes, recent: s.recentSummaries, lastAnswer: text },
+        { mode: 'clarify', recentDomains: s.recentDomains, askedScenes: s.askedScenes, recent: s.recentSummaries, lastAnswer: text, hintTarget: hintTargetFor(s) },
         deltaSink(res),
       )
       s.currentHints = g.hints
@@ -627,7 +647,7 @@ app.post('/api/mbti/answer', async (req, res) => {
     const next = pickProbe(s, MBTI_BANK)
     const g = await genScenarioStream(
       next,
-      { mode: 'next', recentDomains: s.recentDomains, askedScenes: s.askedScenes, recent: s.recentSummaries, lastAnswer: text },
+      { mode: 'next', recentDomains: s.recentDomains, askedScenes: s.askedScenes, recent: s.recentSummaries, lastAnswer: text, hintTarget: hintTargetFor(s) },
       deltaSink(res),
     )
     s.currentPrompt = g.reply
