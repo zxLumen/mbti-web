@@ -4,12 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n server,web -c green,cyan \"npm run server:dev\" \"npm run web:dev\"",
-    "server:dev": "nodemon --watch server.js --watch web/src/lib --exec \"node --experimental-strip-types server.js\"",
-    "web:dev": "vite web --host",
+    "dev": "npm run build && npm start",
     "build": "vite build web --emptyOutDir",
-    "preview": "node --experimental-strip-types server.js",
     "start": "node --experimental-strip-types server.js",
+    "watch": "node --watch --experimental-strip-types server.js",
     "typecheck": "tsc -p web/tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -20,8 +18,6 @@
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react-swc": "^3.8.0",
-    "concurrently": "^9.1.0",
-    "nodemon": "^3.1.7",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "typescript": "^5.7.2",

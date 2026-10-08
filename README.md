@@ -23,15 +23,18 @@ data/                   settings.json + keys.json(本地,已 gitignore)
 
 ## 开发 / 运行
 
-```bash
-npm i
-npm run dev        # server :8787 + web :5175(proxy /api)
-```
+本地与生产同构：**单进程单端口**，由 Express 同时发前端页面与 `/api`。
 
 ```bash
+npm i
+npm run dev        # = build + start，单服务 :8787
+# 或分开：
 npm run build      # 构建前端到 dist/
-npm start          # 生产:node --experimental-strip-types server.js(需先 build)
+npm start          # 起 Express(:8787),同时发 dist/ 与 /api
+npm run watch      # 仅后端改动时自动重启(node --watch)
 ```
+
+打开 `http://localhost:8787/`。改前端源码后需重新 `npm run build`（无独立 Vite 开发服务器）。
 
 > 后端用 Node 内置的 TS 类型擦除(`--experimental-strip-types`)直接跑 `.ts` 源;
 > `web/src/lib/*.ts` 顶部的 `import type` 会被擦除,故服务端可零构建复用同一份题库与引擎。
