@@ -1552,8 +1552,8 @@ body {
 .report-locked-note {
   margin: 0;
   color: var(--fg);
-  opacity: 0.9;
-  font-size: 13px;
+  font-weight: 700;
+  font-size: 13.5px;
 }
 
 .report-count {
