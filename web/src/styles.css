@@ -79,7 +79,12 @@
 }
 
 /* ---- 2. 纸感杂志(浅色编辑排版) ---- */
-[data-theme='paper'] {
+[data-theme='paper'],
+[data-theme='paper-ink'],
+[data-theme='paper-indigo'],
+[data-theme='paper-olive'],
+[data-theme='paper-clay'],
+[data-theme='paper-plum'] {
   --bg: #faf7f1;
   --card: #ffffff;
   --line: #e4ddd2;
@@ -888,12 +893,12 @@ body {
 }
 
 /* —— 纸感杂志:下划线式导航 + 衬线大字 —— */
-[data-theme='paper'] .app-tabs {
+[data-theme^='paper'] .app-tabs {
   gap: 26px;
   border-bottom: 2px solid #16130f;
   padding-bottom: 0;
 }
-[data-theme='paper'] .app-tabs button {
+[data-theme^='paper'] .app-tabs button {
   border: none;
   border-bottom: 3px solid transparent;
   border-radius: 0;
@@ -902,24 +907,24 @@ body {
   font-size: 16px;
   letter-spacing: 0.06em;
 }
-[data-theme='paper'] .app-tabs button.is-on {
+[data-theme^='paper'] .app-tabs button.is-on {
   background: transparent;
   color: var(--tab-active-fg);
   border-bottom-color: var(--tab-active-bd);
 }
-[data-theme='paper'] .result-code {
+[data-theme^='paper'] .result-code {
   font-family: var(--font-display);
 }
-[data-theme='paper'] .quick button {
+[data-theme^='paper'] .quick button {
   background: #fff;
   border-color: #d9d1c4;
   color: #5d564b;
 }
-[data-theme='paper'] .report-head h1,
-[data-theme='paper'] .report-date {
+[data-theme^='paper'] .report-head h1,
+[data-theme^='paper'] .report-date {
   font-family: var(--font-display);
 }
-[data-theme='paper'] .disclaimer {
+[data-theme^='paper'] .disclaimer {
   color: #8a8274;
 }
 
@@ -1048,7 +1053,12 @@ body {
   --img-label: #dfe4ff;
 }
 
-[data-theme='paper'] {
+[data-theme='paper'],
+[data-theme='paper-ink'],
+[data-theme='paper-indigo'],
+[data-theme='paper-olive'],
+[data-theme='paper-clay'],
+[data-theme='paper-plum'] {
   --img-bg1: #fbf9f5;
   --img-bg2: #f1ece3;
   --img-fg: #16130f;
@@ -1070,4 +1080,95 @@ body {
   --img-fg: #f5f5f5;
   --img-dim: #8a8a8a;
   --img-label: #e8e8e8;
+}
+
+/* ============ 纸感系列配色(结构复用 [data-theme^='paper'],仅换色) ============ */
+/* 1. 墨黑:极致对比,近黑墨色 */
+[data-theme='paper-ink'] {
+  --bg: #f7f6f4;
+  --body-bg: linear-gradient(180deg, #f8f7f5 0%, #eceae6 100%);
+  --accent: #17150f;
+  --accent-2: #4b453a;
+  --bar-pos: #1f2937;
+  --bar-neg: #8a8a8a;
+  --bar-track: #e4e1db;
+  --bar-mid: #b6b1a8;
+  --btn-bg: #17150f;
+  --btn-fg: #f7f6f4;
+  --tab-active-fg: #17150f;
+  --tab-active-bd: #17150f;
+  --img-bg1: #f8f7f5;
+  --img-bg2: #eceae6;
+}
+
+/* 2. 靛蓝:理性蓝 */
+[data-theme='paper-indigo'] {
+  --bg: #f5f6fb;
+  --body-bg: linear-gradient(180deg, #f7f8fd 0%, #eaeefb 100%);
+  --accent: #2b4bd6;
+  --accent-2: #6d7ff0;
+  --bar-pos: #2b4bd6;
+  --bar-neg: #e0575f;
+  --bar-track: #e2e6f5;
+  --bar-mid: #a8b1cf;
+  --btn-bg: #2b4bd6;
+  --btn-fg: #ffffff;
+  --tab-active-fg: #2b4bd6;
+  --tab-active-bd: #2b4bd6;
+  --img-bg1: #f7f8fd;
+  --img-bg2: #eaeefb;
+}
+
+/* 3. 橄榄:自然绿 */
+[data-theme='paper-olive'] {
+  --bg: #f8f7ee;
+  --body-bg: linear-gradient(180deg, #f9f8f1 0%, #eef0e2 100%);
+  --accent: #5f7a33;
+  --accent-2: #93a862;
+  --bar-pos: #5f7a33;
+  --bar-neg: #c96a2b;
+  --bar-track: #e6e7d8;
+  --bar-mid: #b4b79c;
+  --btn-bg: #5f7a33;
+  --btn-fg: #ffffff;
+  --tab-active-fg: #5f7a33;
+  --tab-active-bd: #5f7a33;
+  --img-bg1: #f9f8f1;
+  --img-bg2: #eef0e2;
+}
+
+/* 4. 陶土:暖橙棕 */
+[data-theme='paper-clay'] {
+  --bg: #fbf4ec;
+  --body-bg: linear-gradient(180deg, #fcf6ef 0%, #f5e8db 100%);
+  --accent: #b4552d;
+  --accent-2: #d98b5a;
+  --bar-pos: #b4552d;
+  --bar-neg: #4a6b83;
+  --bar-track: #eee0d3;
+  --bar-mid: #c2ab98;
+  --btn-bg: #b4552d;
+  --btn-fg: #ffffff;
+  --tab-active-fg: #b4552d;
+  --tab-active-bd: #b4552d;
+  --img-bg1: #fcf6ef;
+  --img-bg2: #f5e8db;
+}
+
+/* 5. 紫棠:雅致紫 */
+[data-theme='paper-plum'] {
+  --bg: #f9f5f8;
+  --body-bg: linear-gradient(180deg, #faf6f9 0%, #f0e6ee 100%);
+  --accent: #7b3f6e;
+  --accent-2: #a96f9b;
+  --bar-pos: #7b3f6e;
+  --bar-neg: #2f8f8a;
+  --bar-track: #ecdee7;
+  --bar-mid: #c2aec0;
+  --btn-bg: #7b3f6e;
+  --btn-fg: #ffffff;
+  --tab-active-fg: #7b3f6e;
+  --tab-active-bd: #7b3f6e;
+  --img-bg1: #faf6f9;
+  --img-bg2: #f0e6ee;
 }

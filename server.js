@@ -410,7 +410,7 @@ async function genScenario(args) {
   )
   if (!raw || typeof raw.reply !== 'string' || !raw.reply.trim()) return fallbackScenario(args.probe)
   const hints = Array.isArray(raw.hints)
-    ? raw.hints.filter((h) => typeof h === 'string' && h.trim()).slice(0, 2)
+    ? raw.hints.filter((h) => typeof h === 'string' && h.trim()).slice(0, 4)
     : []
   return {
     reply: raw.reply.trim(),
@@ -439,7 +439,7 @@ async function genScenarioStream(probe, args, onDelta) {
   const parsed = content ? extractJson(content) : null
   if (!parsed || typeof parsed.reply !== 'string' || !parsed.reply.trim()) return fallbackScenario(probe)
   const hints = Array.isArray(parsed.hints)
-    ? parsed.hints.filter((h) => typeof h === 'string' && h.trim()).slice(0, 2)
+    ? parsed.hints.filter((h) => typeof h === 'string' && h.trim()).slice(0, 4)
     : []
   return {
     reply: parsed.reply.trim(),
