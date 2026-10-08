@@ -371,12 +371,6 @@ async function makeReportImage(e: HistoryEntry, layout: ReportLayout = 'bars'): 
   return await new Promise((res) => c.toBlob((b) => res(b), 'image/png'))
 }
 
-// 临时:供脚本批量生成样张(可随时移除)
-;(globalThis as unknown as Record<string, unknown>).__mbtiShot = (
-  entry: HistoryEntry,
-  layout?: string,
-) => makeReportImage(entry, (layout as ReportLayout) || 'bars')
-
 function hexA(hex: string, a: number): string {
   const h = hex.replace('#', '')
   const n = parseInt(h.length === 3 ? h.split('').map((x) => x + x).join('') : h, 16)
@@ -447,7 +441,7 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string
 }
 
 async function shareImage(e: HistoryEntry) {
-  const blob = await makeReportImage(e)
+  const blob = await makeReportImage(e, 'both')
   if (!blob) return
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
