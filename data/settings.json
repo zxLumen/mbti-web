@@ -1,0 +1,8 @@
+{
+  "provider": "zxGateway",
+  "baseURL": "",
+  "apiKey": "",
+  "model": "deepseek-chat",
+  "maxTokens": 1024,
+  "temperature": 0.4
+}
