@@ -30,8 +30,9 @@ export function TestPage() {
   }
   const pushDelta = (t: string) => {
     setThinking(false)
-    streamRef.current += t
-    setStreamText(streamRef.current)
+    // 服务端 delta 发的是“累积到当前”的完整文本,这里覆盖而非追加
+    streamRef.current = t
+    setStreamText(t)
   }
 
   const start = async () => {
