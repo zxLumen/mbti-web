@@ -16,8 +16,12 @@ export function App() {
           设置
         </button>
       </nav>
-      {tab === 'test' && <TestPage />}
-      {tab === 'settings' && <SettingsPage />}
+      <div style={{ display: tab === 'test' ? 'contents' : 'none' }}>
+        <TestPage />
+      </div>
+      <div style={{ display: tab === 'settings' ? 'contents' : 'none' }}>
+        <SettingsPage />
+      </div>
     </div>
   )
 }
