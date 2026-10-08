@@ -64,4 +64,7 @@ npm run watch      # 仅后端改动时自动重启(node --watch)
 → `ZX_GATEWAY_BASE_URL` → 本地默认 `http://localhost:3000/api/ai/v1`；token 取 `settings.apiKey`
 / `data/keys.json`，兜底 `ZX_AI_APP_TOKEN`。未取到模型时返回 `degraded:true`，前端提示「简易模式」并回退题库题。
 
+**思考强度**：`settings.reasoningEffort`（`none` / `low` / `default`，默认 `none`）。思考型模型默认会先产
+`reasoning_content`（思维链）、首字慢；设 `none` 时请求带 `reasoning_effort:"none"` 直接作答，实测首字由 ~3.3s 降到 ~1.4s。
+
 环境变量（`mbti-web/.env.local`，已 gitignore）：`SESSION_SECRET`（与博客一致）。

@@ -53,7 +53,7 @@ app.use(express.static(distDir))
 const sessions = new Map()
 const stats = { start: 0, answer: 0, done: 0, reset: 0, perCode: {} }
 
-const DEFAULTS = { provider: 'zxGateway', baseURL: '', model: '', maxTokens: 2048, temperature: 0.6 }
+const DEFAULTS = { provider: 'zxGateway', baseURL: '', model: '', maxTokens: 2048, temperature: 0.6, reasoningEffort: 'none' }
 const now = () => Date.now()
 const progressOf = (s) => ({ qCount: s.qCount, minQ: s.minQ, maxQ: s.maxQ })
 
@@ -125,6 +125,13 @@ function extractJson(text) {
   return null
 }
 
+/** 思考强度:'none'/'low' 会带上 reasoning_effort;'default' 则不传,交给模型默认 */
+function reasoningParams(settings) {
+  const v = settings && settings.reasoningEffort
+  if (!v || v === 'default') return {}
+  return { reasoning_effort: v }
+}
+
 async function llmOnce(ep, settings, system, user, tokens, temperature) {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 30000)
@@ -141,6 +148,7 @@ async function llmOnce(ep, settings, system, user, tokens, temperature) {
         temperature,
         max_tokens: tokens,
         response_format: { type: 'json_object' },
+        ...reasoningParams(settings),
       }),
       signal: ctrl.signal,
     })
@@ -224,6 +232,7 @@ async function streamAttempt(system, user, { temperature, maxTokens, field }, on
         max_tokens: maxTokens ?? Number(settings.maxTokens ?? 2048),
         response_format: { type: 'json_object' },
         stream: true,
+        ...reasoningParams(settings),
       }),
       signal: ctrl.signal,
     })
@@ -554,6 +563,7 @@ app.get('/api/settings', async (req, res) => {
     model: settings.model || '',
     maxTokens: settings.maxTokens ?? 2048,
     temperature: settings.temperature ?? 0.6,
+    reasoningEffort: settings.reasoningEffort || 'none',
     hasKey: Boolean(settings.apiKey || keys.apiKey),
     isOwner: isOwner(req, dataDir),
   })
@@ -570,6 +580,7 @@ app.post('/api/settings', async (req, res) => {
     model: typeof b.model === 'string' ? b.model : cur.model,
     maxTokens: Number.isFinite(Number(b.maxTokens)) ? Number(b.maxTokens) : cur.maxTokens,
     temperature: Number.isFinite(Number(b.temperature)) ? Number(b.temperature) : cur.temperature,
+    reasoningEffort: ['none', 'low', 'default'].includes(b.reasoningEffort) ? b.reasoningEffort : cur.reasoningEffort,
   }
   if (typeof b.apiKey === 'string') {
     if (b.apiKey) keys.apiKey = b.apiKey

@@ -4,6 +4,7 @@ export interface AppSettings {
   model: string
   maxTokens: number
   temperature: number
+  reasoningEffort?: string
   hasKey?: boolean
   isOwner?: boolean
 }

@@ -8,6 +8,7 @@ export function Settings() {
     model: '',
     maxTokens: 2048,
     temperature: 0.6,
+    reasoningEffort: 'none',
   })
   const [apiKey, setApiKey] = useState('')
   const [hasKey, setHasKey] = useState(false)
@@ -93,6 +94,18 @@ export function Settings() {
           disabled={dis}
           onChange={(e) => set({ temperature: Number(e.target.value) })}
         />
+      </div>
+      <div className="field">
+        <label>思考强度（关闭 = 更快更省）</label>
+        <select
+          value={s.reasoningEffort || 'none'}
+          disabled={dis}
+          onChange={(e) => set({ reasoningEffort: e.target.value })}
+        >
+          <option value="none">关闭（推荐：直接作答，首字更快）</option>
+          <option value="low">低</option>
+          <option value="default">默认（交给模型，可能较慢）</option>
+        </select>
       </div>
       {isOwner && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
