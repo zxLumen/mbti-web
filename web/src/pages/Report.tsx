@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api.js'
-import type { HistoryEntry, Tendency } from '../lib/api.js'
+import type { HistoryEntry, StructuredReport, Tendency } from '../lib/api.js'
 import { typeMeta, TYPE_META } from '../lib/mbti-meta.js'
 import { Mascot } from '../components/Mascot.js'
 import { readUnlocked } from '../lib/report-store.js'
+import TYPE_REPORTS_JSON from '../data/type-reports.json'
 import { readAtype, applyTypeTheme, applyDefaultTheme } from '../lib/theme.js'
 
 function fmt(at: number): string {
@@ -117,6 +118,115 @@ function Radar({ tendencies }: { tendencies: Tendency[] }) {
         )
       })}
     </svg>
+  )
+}
+
+/** 16 型的通用分析(预生成,固化;不含作答证据) */
+const TYPE_REPORTS = TYPE_REPORTS_JSON as unknown as Record<string, StructuredReport>
+
+/** 报告正文模块(已解锁=按问答 / 未解锁=通用,共用) */
+function ReportModules({ report, tendencies }: { report?: StructuredReport; tendencies: Tendency[] }) {
+  if (!report) return null
+  return (
+    <>
+      {report.tagline && <p className="rep-tagline">{report.tagline}</p>}
+      {report.overview && <p className="report-summary">{report.overview}</p>}
+      {report.keywords?.length > 0 && (
+        <div className="rep-keywords">
+          {report.keywords.map((k, ki) => (
+            <span key={ki} className="rep-kw">
+              {k}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {tendencies?.length > 0 && (
+        <div className="rep-visual">
+          <Radar tendencies={tendencies} />
+          <div className="rbars">
+            {tendencies.map((t) => (
+              <Bar key={t.dim} t={t} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {report.cognition?.length > 0 && (
+        <div className="rep-block">
+          <div className="rep-h">认知功能栈</div>
+          {report.cognition.map((c) => (
+            <div key={c.fn} className="cog-row">
+              <span className="cog-fn">
+                {c.fn}
+                <i>{c.name}</i>
+              </span>
+              <div className="cog-track">
+                <div className="cog-fill" style={{ width: (c.level / 4) * 100 + '%' }} />
+              </div>
+              <span className="cog-note">{c.note}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(report.strengths?.length > 0 || report.blindspots?.length > 0) && (
+        <div className="rep-cols">
+          <div className="rep-col">
+            <div className="rep-h">优势倾向</div>
+            {report.strengths.map((x, i) => (
+              <div key={i} className="pt">
+                <b>{x.t}</b>
+                <span>{x.d}</span>
+              </div>
+            ))}
+          </div>
+          <div className="rep-col">
+            <div className="rep-h">可能的盲点</div>
+            {report.blindspots.map((x, i) => (
+              <div key={i} className="pt">
+                <b>{x.t}</b>
+                <span>{x.d}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(report.work || report.social || report.stress) && (
+        <div className="rep-cards">
+          {report.work && (
+            <div className="rep-card">
+              <div className="rep-h">工作 / 学习</div>
+              <p>{report.work}</p>
+            </div>
+          )}
+          {report.social && (
+            <div className="rep-card">
+              <div className="rep-h">人际 / 沟通</div>
+              <p>{report.social}</p>
+            </div>
+          )}
+          {report.stress && (
+            <div className="rep-card">
+              <div className="rep-h">压力下的表现</div>
+              <p>{report.stress}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {report.growth?.length > 0 && (
+        <div className="rep-block">
+          <div className="rep-h">行动建议</div>
+          <ol className="rep-growth">
+            {report.growth.map((g, gi) => (
+              <li key={gi}>{g}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -610,6 +720,7 @@ export function Report({
                   <p className="report-locked-note">
                     还没测过这个类型。测出 <b>{code}</b>（{meta.name}）后，这里就会点亮。
                   </p>
+                  <ReportModules report={TYPE_REPORTS[code]} tendencies={[]} />
                   <div className="report-actions">
                     <button className="btn" onClick={onGoTest}>
                       去测一测
@@ -644,111 +755,9 @@ export function Report({
                 <Mascot code={code} variant="banner" />
 
                 {e.report ? (
-                  <>
-                    {e.report.tagline && <p className="rep-tagline">{e.report.tagline}</p>}
-                    {e.report.overview && <p className="report-summary">{e.report.overview}</p>}
-                    {e.report.keywords?.length > 0 && (
-                      <div className="rep-keywords">
-                        {e.report.keywords.map((k, ki) => (
-                          <span key={ki} className="rep-kw">
-                            {k}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </>
+                  <ReportModules report={e.report} tendencies={e.tendencies || []} />
                 ) : (
                   <p className="report-summary">{e.summary || '正在生成完整报告…'}</p>
-                )}
-
-                {e.tendencies?.length > 0 && (
-                  <div className="rep-visual">
-                    <Radar tendencies={e.tendencies} />
-                    <div className="rbars">
-                      {e.tendencies.map((t) => (
-                        <Bar key={t.dim} t={t} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {e.report && (
-                  <>
-                    {e.report.cognition?.length > 0 && (
-                      <div className="rep-block">
-                        <div className="rep-h">认知功能栈</div>
-                        {e.report.cognition.map((c) => (
-                          <div key={c.fn} className="cog-row">
-                            <span className="cog-fn">
-                              {c.fn}
-                              <i>{c.name}</i>
-                            </span>
-                            <div className="cog-track">
-                              <div className="cog-fill" style={{ width: (c.level / 4) * 100 + '%' }} />
-                            </div>
-                            <span className="cog-note">{c.note}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {(e.report.strengths?.length > 0 || e.report.blindspots?.length > 0) && (
-                      <div className="rep-cols">
-                        <div className="rep-col">
-                          <div className="rep-h">优势倾向</div>
-                          {e.report.strengths.map((s, si) => (
-                            <div key={si} className="pt">
-                              <b>{s.t}</b>
-                              <span>{s.d}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="rep-col">
-                          <div className="rep-h">可能的盲点</div>
-                          {e.report.blindspots.map((s, si) => (
-                            <div key={si} className="pt">
-                              <b>{s.t}</b>
-                              <span>{s.d}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {(e.report.work || e.report.social || e.report.stress) && (
-                      <div className="rep-cards">
-                        {e.report.work && (
-                          <div className="rep-card">
-                            <div className="rep-h">工作 / 学习</div>
-                            <p>{e.report.work}</p>
-                          </div>
-                        )}
-                        {e.report.social && (
-                          <div className="rep-card">
-                            <div className="rep-h">人际 / 沟通</div>
-                            <p>{e.report.social}</p>
-                          </div>
-                        )}
-                        {e.report.stress && (
-                          <div className="rep-card">
-                            <div className="rep-h">压力下的表现</div>
-                            <p>{e.report.stress}</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {e.report.growth?.length > 0 && (
-                      <div className="rep-block">
-                        <div className="rep-h">行动建议</div>
-                        <ol className="rep-growth">
-                          {e.report.growth.map((g, gi) => (
-                            <li key={gi}>{g}</li>
-                          ))}
-                        </ol>
-                      </div>
-                    )}
-                  </>
                 )}
 
                 <div className="report-actions">

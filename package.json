@@ -8,7 +8,8 @@
     "build": "vite build web --emptyOutDir",
     "start": "node --env-file-if-exists=.env.local --env-file-if-exists=.env --experimental-strip-types server.js",
     "watch": "node --watch --env-file-if-exists=.env.local --env-file-if-exists=.env --experimental-strip-types server.js",
-    "typecheck": "tsc -p web/tsconfig.json --noEmit"
+    "typecheck": "tsc -p web/tsconfig.json --noEmit",
+    "gen:type-reports": "node web/scripts/gen-type-reports.mjs"
   },
   "dependencies": {
     "express": "^4.21.2"
