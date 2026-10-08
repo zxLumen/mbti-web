@@ -44,3 +44,13 @@ export function retroTypeTheme(history: { code?: string }[]): void {
   const code = (history || []).find((h) => h && /^[A-Z]{4}$/.test(h.code || ''))?.code || ''
   if (code) applyTypeTheme(code)
 }
+
+/** 切回默认纸感(清除类型极光) */
+export function applyDefaultTheme(): void {
+  try {
+    localStorage.removeItem(AKEY)
+  } catch {
+    /* ignore */
+  }
+  applyTheme(DEFAULT_THEME, '')
+}

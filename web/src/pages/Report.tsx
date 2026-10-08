@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import type { HistoryEntry, Tendency } from '../lib/api.js'
-import { typeMeta } from '../lib/mbti-meta.js'
+import { typeMeta, TYPE_META } from '../lib/mbti-meta.js'
 import { Mascot } from '../components/Mascot.js'
+import { readUnlocked } from '../lib/report-store.js'
+import { readAtype, applyTypeTheme, applyDefaultTheme } from '../lib/theme.js'
 
 function fmt(at: number): string {
   try {
@@ -49,6 +51,26 @@ function Bar({ t }: { t: Tendency }) {
   )
 }
 
+const TYPE_VARS = [
+  '--img-bg1', '--img-bg2', '--img-fg', '--img-dim', '--img-label',
+  '--accent', '--bar-pos', '--bar-neg', '--bar-track', '--bar-mid',
+]
+
+/** 用隐藏探针读某类型极光的 CSS 变量(避免把 16 套颜色在 JS 里再写一遍) */
+function typeVars(code: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (typeof document === 'undefined' || !/^[A-Z]{4}$/.test(code)) return out
+  const probe = document.createElement('div')
+  probe.setAttribute('data-theme', 'aurora')
+  probe.setAttribute('data-atype', code)
+  probe.style.cssText = 'position:absolute;left:-9999px;top:0;width:1px;height:1px'
+  document.body.appendChild(probe)
+  const cs = getComputedStyle(probe)
+  for (const n of TYPE_VARS) out[n] = cs.getPropertyValue(n).trim()
+  probe.remove()
+  return out
+}
+
 async function loadMascotImage(code: string): Promise<HTMLImageElement | null> {
   for (const ext of ['svg', 'png', 'webp']) {
     const ok = await new Promise<HTMLImageElement | null>((res) => {
@@ -76,9 +98,9 @@ async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
   const font = (size: number, weight = 400) =>
     `${weight} ${size}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif`
 
-  // 跟随主题 token
-  const cs = getComputedStyle(document.documentElement)
-  const v = (n: string, fb: string) => cs.getPropertyValue(n).trim() || fb
+  // 跟随「该报告的类型」配色:用隐藏探针读 CSS 变量(颜色只维护在 CSS 一处)
+  const tv = typeVars(e.code)
+  const v = (n: string, fb: string) => tv[n] || fb
   const bg1 = v('--img-bg1', '#141a38')
   const bg2 = v('--img-bg2', '#0b1020')
   const fg = v('--img-fg', '#e6e9f5')
@@ -294,6 +316,9 @@ export function Report({
   onGoTest: () => void
 }) {
   const [busy, setBusy] = useState<number | null>(null)
+  const [active, setActive] = useState<string>(() => readAtype())
+  const unlocked = readUnlocked()
+  const allCodes = Object.keys(TYPE_META)
 
   if (!history.length) {
     return (
@@ -315,10 +340,55 @@ export function Report({
           清空
         </button>
       </div>
+
+      <div className="collection">
+        <div className="collection-head">
+          <span>已解锁主题 · {unlocked.length}/16</span>
+          <span className="collection-hint">点亮的可全站切换</span>
+        </div>
+        <div className="tchips">
+          <button
+            className={`tchip${active ? '' : ' on'}`}
+            onClick={() => {
+              applyDefaultTheme()
+              setActive('')
+            }}
+          >
+            默认 · 纸感
+          </button>
+          {allCodes.map((c) => {
+            const m = TYPE_META[c]
+            const on = unlocked.includes(c)
+            const isOn = active === c
+            return (
+              <button
+                key={c}
+                className={`tchip${on ? '' : ' locked'}${isOn ? ' on' : ''}`}
+                disabled={!on}
+                title={on ? `${m.name} · ${m.alias}` : '未解锁 · 测出该类型后点亮'}
+                onClick={() => {
+                  if (!on) return
+                  applyTypeTheme(c)
+                  setActive(c)
+                }}
+              >
+                {on ? c : '🔒'}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       {history.map((e, i) => {
         const meta = typeMeta(e.code)
         return (
-          <details key={e.at} className="report-item" open={i === 0}>
+          <details
+            key={e.at}
+            className="report-item"
+            open={i === 0}
+            data-theme={meta ? 'aurora' : undefined}
+            data-atype={meta ? e.code : undefined}
+          >
             <summary>
               <span className="report-sum-left">
                 <Mascot code={e.code} variant="avatar" size={44} />
@@ -355,6 +425,15 @@ export function Report({
                   }}
                 >
                   {busy === i ? '生成中…' : '保存报告图片'}
+                </button>
+                <button
+                  className="btn ghost"
+                  onClick={() => {
+                    applyTypeTheme(e.code)
+                    setActive(e.code)
+                  }}
+                >
+                  应用此风格
                 </button>
                 <button className="btn ghost" onClick={() => navigator.clipboard.writeText(`我的性格类型：${e.code}`)}>
                   复制类型

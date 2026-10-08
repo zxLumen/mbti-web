@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, streamTurn, type HistoryEntry, type Progress, type Tendency, type TurnResp } from '../lib/api.js'
 import { applyTypeTheme } from '../lib/theme.js'
+import { unlockType } from '../lib/report-store.js'
 import { typeMeta } from '../lib/mbti-meta.js'
 import { Mascot } from '../components/Mascot.js'
 
@@ -214,6 +215,7 @@ export function TestPage({
           }
           onComplete(entry)
           applyTypeTheme(entry.code)
+          unlockType(entry.code)
           setDone(true)
           setResultCode(entry.code)
           setSummary(summaryText)

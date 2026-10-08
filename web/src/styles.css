@@ -1439,3 +1439,84 @@ body {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   flex: 0 0 auto;
 }
+
+
+/* ============ 报告:每条独立沉浸风格 + 主题收集条 ============ */
+
+/* 每条报告自带「该类型」的极光底(不受全局主题影响) */
+.report-item[data-atype] {
+  background: var(--body-bg);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--line));
+}
+
+.report-item[data-atype] > summary {
+  color: var(--fg);
+}
+
+/* 已解锁主题收集条 */
+.collection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--card-bg);
+  backdrop-filter: var(--card-blur);
+  -webkit-backdrop-filter: var(--card-blur);
+}
+
+.collection-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.collection-hint {
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.tchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tchip {
+  border: 1px solid var(--line);
+  background: var(--bubble-bg);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.15s, border-color 0.15s;
+}
+
+.tchip:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.tchip.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.tchip.locked {
+  color: var(--dim);
+  opacity: 0.5;
+  cursor: not-allowed;
+  letter-spacing: 0;
+}
+
+.tchip:disabled {
+  cursor: not-allowed;
+}
