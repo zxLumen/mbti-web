@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -n server,web -c green,cyan \"npm run server:dev\" \"npm run web:dev\"",
-    "server:dev": "nodemon --watch server.js --exec \"node server.js\"",
+    "server:dev": "nodemon --watch server.js --watch web/src/lib --exec \"node --experimental-strip-types server.js\"",
     "web:dev": "vite web --host",
     "build": "vite build web --emptyOutDir",
-    "preview": "node server.js",
-    "start": "node server.js",
+    "preview": "node --experimental-strip-types server.js",
+    "start": "node --experimental-strip-types server.js",
     "typecheck": "tsc -p web/tsconfig.json --noEmit"
   },
   "dependencies": {

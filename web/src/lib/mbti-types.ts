@@ -26,6 +26,8 @@ export interface SessionState {
   id: string
   createdAt: number
   lastAt: number
+  /** 当前展示、等待回答的题目 id(回答后归类到它,而非 history 末条) */
+  currentQId: string | null
   qCount: number
   minQ: number
   maxQ: number

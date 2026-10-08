@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api } from '../lib/api.js'
-import type { MbtiQuestion } from '../lib/mbti-types.js'
+import { api, type QuestionDTO } from '../lib/api.js'
 import { Result } from './Result.js'
 
 interface Progress {
@@ -11,7 +10,7 @@ interface Progress {
 
 export function TestPage() {
   const [sessionId, setSessionId] = useState('')
-  const [q, setQ] = useState<MbtiQuestion | null>(null)
+  const [q, setQ] = useState<QuestionDTO | null>(null)
   const [msgs, setMsgs] = useState<Array<{ role: 'ai' | 'user'; text: string }>>([])
   const [input, setInput] = useState('')
   const [progress, setProgress] = useState<Progress>({ qCount: 0, minQ: 12, maxQ: 30 })
@@ -47,7 +46,7 @@ export function TestPage() {
     start()
   }, [])
 
-  function formatQ(question: MbtiQuestion) {
+  function formatQ(question: QuestionDTO) {
     return `${question.stem}\n\nA. ${question.optionA}\nB. ${question.optionB}`
   }
 
@@ -60,8 +59,8 @@ export function TestPage() {
     setThinking(true)
     const r = await api.answer(sessionId, t)
     if (r.clarify) {
-      setClarify(r.clarify)
-      setMsgs((m) => [...m, { role: 'ai', text: r.clarify }])
+      setClarify(r.text || '')
+      setMsgs((m) => [...m, { role: 'ai', text: r.text || '' }])
       setProgress(r.progress)
       setConf(r.conf || {})
     } else if (r.done) {
@@ -71,8 +70,9 @@ export function TestPage() {
       setConf(r.conf || {})
       await api.stats({ type: 'done', code: r.resultCode })
     } else if (r.question) {
-      setQ(r.question)
-      setMsgs((m) => [...m, { role: 'ai', text: formatQ(r.question) }])
+      const nq = r.question
+      setQ(nq)
+      setMsgs((m) => [...m, { role: 'ai', text: formatQ(nq) }])
       setProgress(r.progress)
       setConf(r.conf || {})
     }

@@ -1,8 +1,7 @@
 {
   "provider": "zxGateway",
   "baseURL": "",
-  "apiKey": "",
-  "model": "deepseek-chat",
+  "model": "gpt-4o-mini",
   "maxTokens": 1024,
   "temperature": 0.4
 }

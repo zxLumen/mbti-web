@@ -1,18 +1,32 @@
-import type { Axis, MbtiHistoryItem, SessionState, MbtiQuestion } from './mbti-types.js'
+import type { Axis, MbtiQuestion, SessionState } from './mbti-types.js'
+
+export const AXES: Axis[] = ['E', 'I', 'S', 'N', 'T', 'F', 'J', 'P']
+
+/** 四个维度,每个含两个极性 */
+export const DIMS: Array<[Axis, Axis]> = [
+  ['E', 'I'],
+  ['S', 'N'],
+  ['T', 'F'],
+  ['J', 'P'],
+]
+
+const OPP: Record<Axis, Axis> = { E: 'I', I: 'E', S: 'N', N: 'S', T: 'F', F: 'T', J: 'P', P: 'J' }
+const DIM_OF: Record<Axis, number> = { E: 0, I: 0, S: 1, N: 1, T: 2, F: 2, J: 3, P: 3 }
+
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n))
 
 export function createSession(id: string): SessionState {
-  const scores: Record<Axis, number> = { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 }
-  const conf: Record<Axis, number> = { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 }
   return {
     id,
     createdAt: Date.now(),
     lastAt: Date.now(),
+    currentQId: null,
     qCount: 0,
     minQ: 12,
     maxQ: 30,
     confT: 0.85,
-    scores,
-    conf,
+    scores: { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 },
+    conf: { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 },
     history: [],
     done: false,
     clarifying: false,
@@ -20,103 +34,96 @@ export function createSession(id: string): SessionState {
   }
 }
 
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n))
+/** 某维度已作答的条目(按时间先后) */
+function dimHistory(s: SessionState, dim: number) {
+  return s.history.filter((h) => DIM_OF[h.axis] === dim)
 }
 
-function axisKeyCount(s: SessionState, a: Axis): number {
-  return s.history.filter((h) => h.axis === a).length
-}
-
-function axisReverseSwitches(s: SessionState, a: Axis): number {
-  const list = s.history.filter((h) => h.axis === a).map((h) => (h.cls > 0 ? 1 : h.cls < 0 ? -1 : 0))
-  let sw = 0
+/** 该维度内回答方向的反转次数(摇摆越多,置信度增长越慢) */
+function dimFlips(s: SessionState, dim: number): number {
+  let flips = 0
   let prev = 0
-  for (const v of list) {
-    if (v === 0) {
-      // skip neutral doesn't reset sign strongly
-      continue
-    }
-    if (prev !== 0 && prev !== v) sw++
-    prev = v
+  for (const h of dimHistory(s, dim)) {
+    const sign = h.cls > 0 ? 1 : h.cls < 0 ? -1 : 0
+    if (sign === 0) continue
+    if (prev !== 0 && sign !== prev) flips++
+    prev = sign
   }
-  return sw
+  return flips
 }
 
 export function updateConf(s: SessionState): void {
-  const axes: Axis[] = ['E', 'I', 'S', 'N', 'T', 'F', 'J', 'P']
-  for (const a of axes) {
-    const qa = axisKeyCount(s, a)
-    const sw = axisReverseSwitches(s, a)
-    const base = clamp(qa / 6, 0, 1)
-    const consist = clamp(1 - (sw / Math.max(1, qa)) * 0.4, 0, 1)
-    s.conf[a] = clamp(base * (0.6 + 0.4 * consist), 0, 1)
+  for (let d = 0; d < DIMS.length; d++) {
+    const qa = dimHistory(s, d).length
+    const base = clamp(qa / 5, 0, 1)
+    const consist = clamp(1 - (dimFlips(s, d) / Math.max(1, qa)) * 0.4, 0, 1)
+    const c = clamp(base * (0.6 + 0.4 * consist), 0, 1)
+    // 两端显示同一维度置信度
+    for (const ax of DIMS[d]) s.conf[ax] = c
   }
 }
 
-export function applyClassification(s: SessionState, axis: Axis, cls: -2 | -1 | 0 | 1 | 2, w: number, qId: string): void {
-  s.qCount += 1
-  s.history.push({ qId, axis, cls, w })
-  // cls>0 means optionA, cls<0 means optionB (by pair meaning we track delta)
-  const delta = cls * w
-  // accumulate on axis primary? axis is the measured axis
-  s.scores[axis] += delta
-  s.lastAt = Date.now()
+/**
+ * 计入用户对某题的归类。
+ * `pair` 指明该极性的表述在 A 还是 B：pair='A' 选 A 朝向 axis；pair='B' 选 B 朝向 axis。
+ */
+export function applyAnswer(s: SessionState, q: MbtiQuestion, cls: -2 | -1 | 0 | 1 | 2): void {
+  const towards = q.pair === 'A' ? cls : (-cls as -2 | -1 | 0 | 1 | 2)
+  const delta = towards * q.weight
+  s.scores[q.axis] += delta
+  s.scores[OPP[q.axis]] -= delta
+  s.history.push({ qId: q.id, axis: q.axis, cls, w: q.weight })
+  s.qCount = s.history.length
+  s.clarifying = false
   updateConf(s)
+  s.lastAt = Date.now()
 }
 
 export function shouldClarify(s: SessionState): boolean {
   if (s.clarifying) return false
-  if (s.qCount === 0) return false
-  const last = s.history[s.history.length - 1]
-  if (!last) return false
-  if (last.cls !== 0) return false
-  // check previous also 0
-  const prev = s.history[s.history.length - 2]
-  if (prev && prev.cls === 0) return true
-  return false
+  const r = s.history.slice(-2)
+  return r.length === 2 && r.every((h) => h.cls === 0)
 }
 
 export function canEnd(s: SessionState): boolean {
-  const axes: Axis[] = ['E', 'I', 'S', 'N', 'T', 'F', 'J', 'P']
-  const minConf = Math.min(...axes.map((a) => s.conf[a]))
   if (s.qCount >= s.maxQ) return true
-  if (s.qCount >= s.minQ && minConf >= s.confT) return true
-  return false
+  return s.qCount >= s.minQ && DIMS.every(([a]) => s.conf[a] >= s.confT)
 }
 
 export function computeType(s: SessionState): string {
-  let ei: 'E' | 'I' = s.scores['E'] >= s.scores['I'] ? 'E' : 'I'
-  let sn: 'S' | 'N' = s.scores['S'] >= s.scores['N'] ? 'S' : 'N'
-  let tf: 'T' | 'F' = s.scores['T'] >= s.scores['F'] ? 'T' : 'F'
-  let jp: 'J' | 'P' = s.scores['J'] >= s.scores['P'] ? 'J' : 'P'
-  // tie-break neutral -> prefer more common? keep as-is (>=)
-  return `${ei}${sn}${tf}${jp}`
+  let code = ''
+  for (const [a, b] of DIMS) code += s.scores[a] >= s.scores[b] ? a : b
+  return code
 }
 
-export function pickNextQuestion(s: SessionState, bank: MbtiQuestion[]): MbtiQuestion | null {
-  if (canEnd(s)) return null
-  // find axis with lowest conf
-  const axes: Axis[] = ['E', 'I', 'S', 'N', 'T', 'F', 'J', 'P']
-  let target: Axis = axes[0]
+/** 选下一题：优先置信度最低的维度,再优先该维度里作答较少的极性 */
+export function pickNext(s: SessionState, bank: MbtiQuestion[]): MbtiQuestion | null {
+  const unused = bank.filter((q) => !s.usedIds.has(q.id))
+  if (!unused.length) return null
+  let target = 0
   let best = Number.POSITIVE_INFINITY
-  for (const a of axes) {
-    const v = s.conf[a]
-    if (v < best - 1e-6) {
+  for (let d = 0; d < DIMS.length; d++) {
+    const v = s.conf[DIMS[d][0]]
+    if (v < best - 1e-9) {
       best = v
-      target = a
-    } else if (Math.abs(v - best) < 1e-6 && axisKeyCount(s, target) > axisKeyCount(s, a)) {
-      target = a
+      target = d
     }
   }
-  const candidates = bank.filter((q) => q.axis === target && !s.usedIds.has(q.id))
-  if (candidates.length === 0) {
-    // fallback: any unused
-    const any = bank.filter((q) => !s.usedIds.has(q.id))
-    if (any.length === 0) return null
-    return any[Math.floor(Math.random() * any.length)]
-  }
-  // prefer higher weight + less used? simple: sort by weight desc then random small
-  candidates.sort((a, b) => (b.weight || 1) - (a.weight || 1))
-  return candidates[0]
+  let list = unused.filter((q) => DIM_OF[q.axis] === target)
+  if (!list.length) list = unused
+  // 两端平衡:优先作答较少的极性,其次权重高的题
+  const [a, b] = DIMS[target]
+  const na = dimHistory(s, target).filter((h) => h.axis === a).length
+  const nb = dimHistory(s, target).filter((h) => h.axis === b).length
+  const prefer: Axis = na <= nb ? a : b
+  list = [...list].sort((x, y) => {
+    const px = x.axis === prefer ? 0 : 1
+    const py = y.axis === prefer ? 0 : 1
+    if (px !== py) return px - py
+    return (y.weight || 1) - (x.weight || 1)
+  })
+  const q = list[0]
+  s.currentQId = q.id
+  s.usedIds.add(q.id)
+  return q
 }

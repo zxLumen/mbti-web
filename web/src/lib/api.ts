@@ -1,30 +1,52 @@
-const KEY = 'mbti.settings.v1'
+export interface AppSettings {
+  provider: string
+  baseURL: string
+  model: string
+  maxTokens: number
+  temperature: number
+  hasKey?: boolean
+}
 
-function getSettings() {
-  try {
-    const raw = localStorage.getItem(KEY)
-    return raw ? JSON.parse(raw) : {}
-  } catch {
-    return {}
-  }
+async function post<T>(url: string, body: unknown): Promise<T> {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return r.json() as Promise<T>
+}
+
+export interface QuestionDTO {
+  id: string
+  axis: string
+  stem: string
+  optionA: string
+  optionB: string
+}
+
+export interface Progress {
+  qCount: number
+  minQ: number
+  maxQ: number
+}
+
+export type Conf = Record<string, number>
+
+export interface AnswerResp {
+  question?: QuestionDTO
+  clarify?: boolean
+  text?: string
+  done?: boolean
+  resultCode?: string
+  progress: Progress
+  conf: Conf
 }
 
 export const api = {
-  async start() {
-    const res = await fetch('/api/mbti/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
-    return res.json()
-  },
-  async answer(sessionId: string, text: string) {
-    const res = await fetch('/api/mbti/answer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId, text }) })
-    return res.json()
-  },
-  async reset(sessionId: string) {
-    const res = await fetch('/api/mbti/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId }) })
-    return res.json()
-  },
-  async stats(p: any) {
-    try {
-      await fetch('/api/mbti/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) })
-    } catch {}
-  }
+  start: () => post<{ sessionId: string; question: QuestionDTO | null; progress: Progress; conf: Conf }>('/api/mbti/start', {}),
+  answer: (sessionId: string, text: string) => post<AnswerResp>('/api/mbti/answer', { sessionId, text }),
+  reset: (sessionId: string) => post<{ ok: boolean }>('/api/mbti/reset', { sessionId }),
+  stats: (p: { type: string; code?: string }) => post<{ ok: boolean }>('/api/mbti/stats', p).catch(() => ({ ok: false })),
+  getSettings: () => fetch('/api/settings').then((r) => r.json() as Promise<AppSettings>),
+  saveSettings: (s: Partial<AppSettings> & { apiKey?: string }) => post<{ ok: boolean; hasKey: boolean }>('/api/settings', s),
 }
