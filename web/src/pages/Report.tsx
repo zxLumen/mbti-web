@@ -133,10 +133,83 @@ async function loadMascotImage(code: string): Promise<HTMLImageElement | null> {
   return null
 }
 
-/** 把一条结果画成一张好看的 PNG 报告 */
-async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
+/** 画布版雷达图(4 维清晰度);返回新的 y */
+function drawRadarCanvas(
+  ctx: CanvasRenderingContext2D,
+  tend: Tendency[],
+  topY: number,
+  r: number,
+  C: { accent: string; dim: string; track: string },
+  font: (n: number, w?: number) => string,
+): number {
   const W = 900
-  const H = 1800
+  const cx = W / 2
+  const cy = topY + r
+  const dims: Array<[string, number]> = [
+    ['EI', -90],
+    ['SN', 0],
+    ['TF', 90],
+    ['JP', 180],
+  ]
+  const at = (ang: number, rad: number) => {
+    const a = (ang * Math.PI) / 180
+    return [cx + Math.cos(a) * rad, cy + Math.sin(a) * rad] as const
+  }
+  ctx.strokeStyle = C.track
+  ctx.lineWidth = 1.5
+  for (const f of [0.34, 0.67, 1]) {
+    ctx.beginPath()
+    ctx.arc(cx, cy, r * f, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  for (const [, ang] of dims) {
+    const [x, y] = at(ang, r)
+    ctx.beginPath()
+    ctx.moveTo(cx, cy)
+    ctx.lineTo(x, y)
+    ctx.stroke()
+  }
+  const pts = dims.map(([d, ang]) => {
+    const t = tend.find((x) => x.dim === d)
+    const cl = t ? Math.min(1, Math.abs((t.posPct - 50) / 50)) : 0
+    return at(ang, r * 0.16 + cl * r * 0.84)
+  })
+  ctx.beginPath()
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)))
+  ctx.closePath()
+  ctx.fillStyle = hexA(C.accent, 0.26)
+  ctx.fill()
+  ctx.strokeStyle = C.accent
+  ctx.lineWidth = 3
+  ctx.stroke()
+  ctx.fillStyle = C.accent
+  for (const [x, y] of pts) {
+    ctx.beginPath()
+    ctx.arc(x, y, 5, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.font = font(26, 600)
+  ctx.fillStyle = C.dim
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (const [d, ang] of dims) {
+    const t = tend.find((x) => x.dim === d)
+    const dom = t ? (t.posPct >= 50 ? t.posLabel : t.negLabel) : ''
+    const p = t ? Math.round(t.posPct >= 50 ? t.posPct : 100 - t.posPct) : 0
+    const [x, y] = at(ang, r + 36)
+    ctx.fillText(dom ? `${dom} ${p}%` : '', x, y)
+  }
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+  return cy + r + 84
+}
+
+export type ReportLayout = 'bars' | 'both' | 'radar'
+
+/** 把一条结果画成一张好看的 PNG 报告(layout: 只条形 / 条形+雷达 / 只雷达) */
+async function makeReportImage(e: HistoryEntry, layout: ReportLayout = 'bars'): Promise<Blob | null> {
+  const W = 900
+  const H = layout === 'both' ? 2260 : layout === 'radar' ? 1960 : 1800
   const c = document.createElement('canvas')
   c.width = W
   c.height = H
@@ -215,12 +288,16 @@ async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
     ctx.fillText(kws.join(' · '), PAD, NAME_Y + 46)
   }
 
-  // 维度条(中心分割;说明文字画在条下方,避免溢出画布)
+  // 视觉区:按 layout 画「雷达 / 条形」
   const barX = PAD + 116
   const barW = W - PAD * 2 - 116 * 2
   const midX = barX + barW / 2
   let y = 812
-  for (const t of e.tendencies || []) {
+  if (layout !== 'bars') {
+    const r = layout === 'radar' ? 230 : 172
+    y = drawRadarCanvas(ctx, e.tendencies || [], y, r, { accent, dim, track: barTrack }, font)
+  }
+  for (const t of layout === 'radar' ? [] : e.tendencies || []) {
     const v = (clamp(t.posPct, 0, 100) - 50) / 50
     const dom: 'pos' | 'neg' = v >= 0 ? 'pos' : 'neg'
     const domLabel = dom === 'pos' ? t.posLabel : t.negLabel
@@ -293,6 +370,12 @@ async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
 
   return await new Promise((res) => c.toBlob((b) => res(b), 'image/png'))
 }
+
+// 临时:供脚本批量生成样张(可随时移除)
+;(globalThis as unknown as Record<string, unknown>).__mbtiShot = (
+  entry: HistoryEntry,
+  layout?: string,
+) => makeReportImage(entry, (layout as ReportLayout) || 'bars')
 
 function hexA(hex: string, a: number): string {
   const h = hex.replace('#', '')
