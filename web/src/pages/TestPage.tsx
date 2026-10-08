@@ -240,6 +240,10 @@ export function TestPage() {
     api.reset(sessionId).then(() => start())
   }
 
+  function confirmReset() {
+    if (window.confirm('重新开始？当前这次的选择会被清空（历史结果会保留）。')) reset()
+  }
+
   function clearHistory() {
     try {
       localStorage.removeItem(H_KEY)
@@ -256,10 +260,15 @@ export function TestPage() {
       {!done && (
         <>
           <div className="progress card soft">
+            <div className="progress-top">
+              <span className="progress-note">顺着聊就好，不用急着得出结论 ~</span>
+              <button className="link-btn" onClick={confirmReset}>
+                重新开始
+              </button>
+            </div>
             <div className="progress-bar">
               <div className="progress-fill" style={{ width: pct + '%' }} />
             </div>
-            <div className="progress-note">顺着聊就好，不用急着得出结论 ~</div>
             {degraded && (
               <div className="degraded-note">简易模式：模型未生效，正在用题库题（站长可在「设置」检查配置）</div>
             )}

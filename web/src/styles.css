@@ -195,6 +195,26 @@ body {
   text-align: center;
 }
 
+.progress-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.link-btn {
+  background: transparent;
+  border: none;
+  color: var(--dim);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.link-btn:hover {
+  color: var(--fg);
+}
+
 .degraded-note {
   color: var(--warn);
   font-size: 12px;
