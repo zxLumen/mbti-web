@@ -1484,3 +1484,13 @@ body {
 .type-banner b {
   letter-spacing: 1px;
 }
+
+/* 报告列表里的插画头像(cover 裁切,偏左取主角色) */
+.mascot-avatar {
+  object-fit: cover;
+  object-position: 18% 45%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  flex: 0 0 auto;
+}

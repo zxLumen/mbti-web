@@ -32,6 +32,7 @@ export const DEFAULT_THEME = 'paper'
 
 const KEY = 'mbti.theme.v1'
 const AKEY = 'mbti.atype.v1'
+const OFFKEY = 'mbti.atype.off'
 
 /** 已完成测评的类型(完成一次后,整体切到该类型专属极光) */
 export function readAtype(): string {
@@ -66,6 +67,7 @@ export function saveTheme(id: string): void {
   try {
     localStorage.setItem(KEY, id)
     localStorage.removeItem(AKEY)
+    localStorage.removeItem(OFFKEY)
   } catch {
     /* ignore */
   }
@@ -77,18 +79,37 @@ export function applyTypeTheme(code: string): void {
   if (!/^[A-Z]{4}$/.test(code)) return
   try {
     localStorage.setItem(AKEY, code)
+    localStorage.removeItem(OFFKEY)
   } catch {
     /* ignore */
   }
   applyTheme('aurora', code)
 }
 
-/** 放弃类型极光,回到用户选择/默认主题 */
+/** 放弃类型极光,回到用户选择/默认主题(记下主动关闭,回溯不再生效) */
 export function clearTypeTheme(): void {
   try {
     localStorage.removeItem(AKEY)
+    localStorage.setItem(OFFKEY, '1')
   } catch {
     /* ignore */
   }
   applyTheme(readTheme(), '')
+}
+
+/**
+ * 已有完成记录、但还没有类型极光的用户(含老版本记录):回溯套用最新一条的类型。
+ * 用户主动"恢复主题"后不再触发。
+ */
+export function retroTypeTheme(history: { code?: string }[]): void {
+  if (readAtype()) return
+  let off = ''
+  try {
+    off = localStorage.getItem(OFFKEY) || ''
+  } catch {
+    off = ''
+  }
+  if (off) return
+  const code = (history || []).find((h) => h && /^[A-Z]{4}$/.test(h.code || ''))?.code || ''
+  if (code) applyTypeTheme(code)
 }

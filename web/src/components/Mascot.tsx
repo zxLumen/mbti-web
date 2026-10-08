@@ -4,11 +4,12 @@ import { typeMeta } from '../lib/mbti-meta.js'
 const EXTS = ['svg', 'png', 'webp']
 
 /**
- * 类型小人:优先用 `mascots/<CODE>.(svg|png|webp)`(由用户自行放置,默认 16Personalities 插画),
+ * 类型小人:优先用 `mascots/<CODE>.(svg|png|webp)`(默认 16Personalities 插画),
  * 找不到则回退 emoji 拟人。
  *
- * - `square`(默认):方形小图(仅适合方图素材)
- * - `banner`:横幅场景图(16P 插画是 900x350,用这个才不变形)
+ * - `square`(默认):方形小图
+ * - `avatar`:列表行小头像(cover 裁切,偏左取主角色)
+ * - `banner`:横幅场景图(900x350,整宽展示不变形)
  */
 export function Mascot({
   code,
@@ -18,7 +19,7 @@ export function Mascot({
 }: {
   code: string
   size?: number
-  variant?: 'square' | 'banner'
+  variant?: 'square' | 'avatar' | 'banner'
   className?: string
 }) {
   const meta = typeMeta(code)
@@ -37,6 +38,16 @@ export function Mascot({
         </div>
       )
     }
+    if (variant === 'avatar') {
+      return (
+        <span
+          className={`mascot-emoji mascot-avatar ${className}`}
+          style={{ width: size, height: size, fontSize: Math.round(size * 0.55) }}
+        >
+          {meta.emoji}
+        </span>
+      )
+    }
     return (
       <span className={`mascot-emoji ${className}`} style={{ fontSize: Math.round(size * 0.82), lineHeight: 1 }}>
         {meta.emoji}
@@ -44,23 +55,34 @@ export function Mascot({
     )
   }
 
+  const src = `/mascots/${code}.${EXTS[extIdx]}`
+
   if (variant === 'banner') {
     return (
       <div className={`mascot-banner ${className}`}>
-        <img
-          src={`/mascots/${code}.${EXTS[extIdx]}`}
-          alt={meta.name}
-          loading="lazy"
-          onError={onErr}
-        />
+        <img src={src} alt={meta.name} loading="lazy" onError={onErr} />
       </div>
+    )
+  }
+
+  if (variant === 'avatar') {
+    return (
+      <img
+        className={`mascot-avatar ${className}`}
+        src={src}
+        alt={meta.name}
+        width={size}
+        height={size}
+        loading="lazy"
+        onError={onErr}
+      />
     )
   }
 
   return (
     <img
       className={`mascot-img ${className}`}
-      src={`/mascots/${code}.${EXTS[extIdx]}`}
+      src={src}
       alt={meta.name}
       width={size}
       height={size}

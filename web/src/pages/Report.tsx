@@ -321,10 +321,7 @@ export function Report({
           <details key={e.at} className="report-item" open={i === 0}>
             <summary>
               <span className="report-sum-left">
-                <span
-                  className="report-dot"
-                  style={{ background: meta ? meta.color : 'var(--accent)' }}
-                />
+                <Mascot code={e.code} variant="avatar" size={44} />
                 <b className="report-code">{e.code || '—'}</b>
                 {meta && (
                   <span className="report-name">

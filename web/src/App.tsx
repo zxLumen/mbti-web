@@ -3,7 +3,7 @@ import { TestPage } from './pages/TestPage.js'
 import { Report } from './pages/Report.js'
 import { Settings as SettingsPage } from './pages/Settings.js'
 import { readHistory, writeHistory, clearHistory } from './lib/report-store.js'
-import { applyTheme, readTheme, readAtype } from './lib/theme.js'
+import { applyTheme, readTheme, readAtype, retroTypeTheme } from './lib/theme.js'
 import type { HistoryEntry } from './lib/api.js'
 
 type Tab = 'test' | 'report' | 'settings'
@@ -14,6 +14,7 @@ export function App() {
 
   useEffect(() => {
     applyTheme(readTheme(), readAtype())
+    retroTypeTheme(readHistory())
   }, [])
 
   const addEntry = (e: HistoryEntry) => setHistory((h) => writeHistory([e, ...h]))
