@@ -33,6 +33,14 @@ export interface Tendency {
   posPct: number
 }
 
+/** 一次完成的测评结果(存在 localStorage,供「报告」页查看) */
+export interface HistoryEntry {
+  code: string
+  summary: string
+  tendencies: Tendency[]
+  at: number
+}
+
 export interface TurnResp {
   sessionId?: string
   message?: string

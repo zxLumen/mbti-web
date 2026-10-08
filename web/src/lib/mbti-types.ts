@@ -50,6 +50,8 @@ export interface SessionState {
   currentHints: string[]
   /** 最近用过的场景域,用于避免重复 */
   recentDomains: string[]
+  /** 最近问过的具体场景标签,用于强去重 */
+  askedScenes: string[]
   /** 最近几轮问答摘要,用于承接 */
   recentSummaries: string[]
   qCount: number

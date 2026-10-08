@@ -24,6 +24,7 @@ export function createSession(id: string): SessionState {
     currentPrompt: '',
     currentHints: [],
     recentDomains: [],
+    askedScenes: [],
     recentSummaries: [],
     qCount: 0,
     minQ: 12,

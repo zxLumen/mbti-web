@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, streamTurn, type Progress, type Tendency, type TurnResp } from '../lib/api.js'
-import { Result } from './Result.js'
+import { api, streamTurn, type HistoryEntry, type Progress, type Tendency, type TurnResp } from '../lib/api.js'
 
 interface Msg {
   role: 'ai' | 'user'
@@ -17,14 +16,8 @@ interface SavedSession {
   summary: string
   tendencies: Tendency[]
 }
-export interface HistoryEntry {
-  code: string
-  summary: string
-  at: number
-}
 
 const S_KEY = 'mbti.session.v1'
-const H_KEY = 'mbti.history.v1'
 const DEFAULT_PROGRESS: Progress = { qCount: 0, minQ: 12, maxQ: 30 }
 
 function readSession(): SavedSession | null {
@@ -49,14 +42,6 @@ function clearSession() {
     /* ignore */
   }
 }
-function readHistory(): HistoryEntry[] {
-  try {
-    const raw = localStorage.getItem(H_KEY)
-    return raw ? (JSON.parse(raw) as HistoryEntry[]) : []
-  } catch {
-    return []
-  }
-}
 
 /** AI 气泡按空行分段,避免挤成一坨 */
 function AiText({ text }: { text: string }) {
@@ -76,7 +61,13 @@ function AiText({ text }: { text: string }) {
   )
 }
 
-export function TestPage() {
+export function TestPage({
+  onComplete,
+  onViewReport,
+}: {
+  onComplete: (e: HistoryEntry) => void
+  onViewReport: () => void
+}) {
   const [sessionId, setSessionId] = useState('')
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
@@ -89,7 +80,6 @@ export function TestPage() {
   const [resultCode, setResultCode] = useState('')
   const [summary, setSummary] = useState('')
   const [tendencies, setTendencies] = useState<Tendency[]>([])
-  const [history, setHistory] = useState<HistoryEntry[]>([])
   const [hydrated, setHydrated] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -148,10 +138,8 @@ export function TestPage() {
     setTimeout(() => inputRef.current?.focus(), 50)
   }
 
-  // 首次挂载:优先恢复存档;服务端仍在则续,否则重开
   useEffect(() => {
     ;(async () => {
-      setHistory(readHistory())
       const saved = readSession()
       if (saved && saved.sessionId) {
         setSessionId(saved.sessionId)
@@ -187,9 +175,9 @@ export function TestPage() {
       setHydrated(true)
       start()
     })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 存档(仅在恢复完成后)
   useEffect(() => {
     if (!hydrated) return
     if (!sessionId && msgs.length === 0) return
@@ -215,20 +203,17 @@ export function TestPage() {
         if (p.progress) setProgress(p.progress)
         if (p.done) {
           const summaryText = p.summary || full
+          const entry: HistoryEntry = {
+            code: p.resultCode || '',
+            summary: summaryText,
+            tendencies: p.tendencies || [],
+            at: Date.now(),
+          }
+          onComplete(entry)
           setDone(true)
-          setResultCode(p.resultCode || '')
+          setResultCode(entry.code)
           setSummary(summaryText)
-          setTendencies(p.tendencies || [])
-          const entry: HistoryEntry = { code: p.resultCode || '', summary: summaryText, at: Date.now() }
-          setHistory((h) => {
-            const nh = [entry, ...h].slice(0, 12)
-            try {
-              localStorage.setItem(H_KEY, JSON.stringify(nh))
-            } catch {
-              /* ignore */
-            }
-            return nh
-          })
+          setTendencies(entry.tendencies)
           api.stats({ type: 'done', code: p.resultCode })
         } else {
           setMsgs((m) => [...m, { role: 'ai', text: full || p.message || '' }])
@@ -251,18 +236,8 @@ export function TestPage() {
   function reset() {
     api.reset(sessionId).then(() => start())
   }
-
   function confirmReset() {
     if (window.confirm('重新开始？当前这次的选择会被清空（历史结果会保留）。')) reset()
-  }
-
-  function clearHistory() {
-    try {
-      localStorage.removeItem(H_KEY)
-    } catch {
-      /* ignore */
-    }
-    setHistory([])
   }
 
   const pct = Math.min(100, (progress.qCount / (progress.maxQ || 30)) * 100)
@@ -333,14 +308,20 @@ export function TestPage() {
       )}
       {done && (
         <div className="result-wrap">
-          <Result
-            code={resultCode}
-            summary={summary}
-            tendencies={tendencies}
-            history={history}
-            onRestart={() => reset()}
-            onClearHistory={clearHistory}
-          />
+          <div className="card done-card">
+            <div className="done-emoji">🎉</div>
+            <h1 style={{ textAlign: 'center' }}>这一轮聊完啦</h1>
+            <div className="result-code">{resultCode}</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+              <button className="btn" onClick={onViewReport}>
+                查看报告
+              </button>
+              <button className="btn ghost" onClick={reset}>
+                重新聊聊
+              </button>
+            </div>
+            <p className="disclaimer">结果已存入「报告」，随时可以回来查看或保存图片。</p>
+          </div>
         </div>
       )}
     </div>

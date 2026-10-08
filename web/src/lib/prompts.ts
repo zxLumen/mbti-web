@@ -37,9 +37,11 @@ export const SCENARIO_SYSTEM = `你是一位温柔、真诚、不评判的引导
 - 普通轮次可先用半句话承接对方上一轮（能省则省）；首次开场一句温暖问候即可。
 - 情境要贴近生活（工作、朋友、独处、做决定、意见不合、休息…），并尽量避开最近已用过的领域。
 - 中立地指向该方面的两端，不暗示哪种更好，不提到 MBTI/字母，也不让人察觉在测试。
+- **不要重复**：不要与"已问过的场景"列表里任何一条重复或过于相似；尤其别反复用同一个开头/比喻（例如总写"朋友临时约你出门"）。每次换一个**明显不同**的生活侧面。
 - 额外给 2 个简短的"常见反应"词条（每条不超过 12 个字、中性口语）。
+- 另外给一个 4～10 字的**具体情境标签**（scene），如"临时邀约""会议分歧""收拾行李"，用于去重；不要和已用过的重复。
 - **排版**：用空行（\n\n）分段——承接(可省略) / 情境 / 问题；问题必须单独成段。不要项目符号、编号、【】这类标记。
-只输出严格 JSON：{"reply":"...", "hints":["...","..."], "domain":"简短场景领域词"}`
+只输出严格 JSON：{"reply":"...", "hints":["...","..."], "domain":"简短场景领域词", "scene":"具体情境标签"}`
 
 /** 判读用户回答落在维度的哪一端 */
 export const CLASSIFY_SYSTEM = `你是 MBTI 倾向的判读助手。给你一个场景问题、它想了解的方面(含"更偏A端/更偏B端"的说明)、以及用户的回答。
@@ -62,6 +64,7 @@ export function scenarioUserPrompt(args: {
   dim: Dim
   mode: 'opening' | 'next' | 'clarify'
   recentDomains: string[]
+  askedScenes: string[]
   recent: string[]
   lastAnswer?: string
 }): string {
@@ -71,12 +74,14 @@ export function scenarioUserPrompt(args: {
     `这一端(A 端)：${info.pos}`,
     `另一端(B 端)：${info.neg}`,
   ]
+  if (args.askedScenes && args.askedScenes.length)
+    lines.push(`已经问过下面这些场景，请务必换一个**明显不同**的（不要重复、不要近似、不要同义改写）：\n- ${args.askedScenes.join('\n- ')}`)
   if (args.recentDomains.length) lines.push(`最近已用过的场景领域(请避开)：${args.recentDomains.join('、')}`)
   if (args.recent.length) lines.push(`最近几轮对话摘要(用于承接)：\n- ${args.recent.join('\n- ')}`)
   if (args.lastAnswer) lines.push(`对方最新的回答：${args.lastAnswer}`)
   if (args.mode === 'opening') lines.push('这是本轮测评的开场，请先做一个温暖简短的开场。')
   if (args.mode === 'clarify')
-    lines.push('对方上一次说得比较含糊，请围绕同一个场景用更贴心、更好回答的方式轻轻追问一句，不要换话题。')
+    lines.push('对方上一次说得比较含糊。请**换一种说法、更具体地**再问同一个点，帮他更容易回答（不要一字不差地重复，也不要换到别的方面）。')
   return lines.join('\n')
 }
 

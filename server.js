@@ -58,6 +58,13 @@ const DEFAULTS = { provider: 'zxGateway', baseURL: '', model: '', maxTokens: 204
 const now = () => Date.now()
 const progressOf = (s) => ({ qCount: s.qCount, minQ: s.minQ, maxQ: s.maxQ })
 
+/** 记住刚生成的场景标签,用于后续去重 */
+function rememberScene(s, g) {
+  const label = String((g && (g.scene || g.domain)) || '').trim()
+  if (label) s.askedScenes = [...(s.askedScenes || []), label].slice(-8)
+  if (g && g.domain) s.recentDomains = [...(s.recentDomains || []), g.domain].slice(-8)
+}
+
 function cleanup() {
   const ttl = 6 * 60 * 60 * 1000
   const t = now()
@@ -106,7 +113,9 @@ async function persistSessions() {
   for (const [id, s] of sessions) obj[id] = serializeSession(s)
   try {
     await fs.mkdir(dataDir, { recursive: true })
-    await fs.writeFile(sessionsFile, JSON.stringify(obj))
+    const tmp = sessionsFile + '.tmp'
+    await fs.writeFile(tmp, JSON.stringify(obj))
+    await fs.rename(tmp, sessionsFile) // 原子替换,避免写一半被中断丢会话
   } catch (e) {
     console.warn('[mbti] 会话落盘失败:', e?.message || e)
   }
@@ -417,6 +426,7 @@ async function genScenarioStream(probe, args, onDelta) {
       dim: probe.dim,
       mode: args.mode,
       recentDomains: args.recentDomains || [],
+      askedScenes: args.askedScenes || [],
       recent: args.recent || [],
       lastAnswer: args.lastAnswer,
     }),
@@ -432,6 +442,7 @@ async function genScenarioStream(probe, args, onDelta) {
     reply: parsed.reply.trim(),
     hints,
     domain: typeof parsed.domain === 'string' ? parsed.domain.slice(0, 12) : '',
+    scene: typeof parsed.scene === 'string' ? parsed.scene.slice(0, 12) : '',
     degraded: false,
   }
 }
@@ -538,10 +549,10 @@ app.post('/api/mbti/start', async (_req, res) => {
       persistSessions()
       return finish({ sessionId: id, message: '你好，我们可以慢慢聊聊。', hints: [], progress: progressOf(s), conf: s.conf, degraded: false })
     }
-    const g = await genScenarioStream(probe, { mode: 'opening', recentDomains: [], recent: [] }, deltaSink(res))
+    const g = await genScenarioStream(probe, { mode: 'opening', recentDomains: [], askedScenes: [], recent: [] }, deltaSink(res))
     s.currentPrompt = g.reply
     s.currentHints = g.hints
-    if (g.domain) s.recentDomains.push(g.domain)
+    rememberScene(s, g)
     persistSessions()
     finish({ sessionId: id, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded })
   } catch (e) {
@@ -577,7 +588,7 @@ app.post('/api/mbti/answer', async (req, res) => {
       s.clarifying = true
       const g = await genScenarioStream(
         probe,
-        { mode: 'clarify', recentDomains: s.recentDomains, recent: s.recentSummaries, lastAnswer: text },
+        { mode: 'clarify', recentDomains: s.recentDomains, askedScenes: s.askedScenes, recent: s.recentSummaries, lastAnswer: text },
         deltaSink(res),
       )
       s.currentHints = g.hints
@@ -613,15 +624,12 @@ app.post('/api/mbti/answer', async (req, res) => {
     const next = pickProbe(s, MBTI_BANK)
     const g = await genScenarioStream(
       next,
-      { mode: 'next', recentDomains: s.recentDomains, recent: s.recentSummaries, lastAnswer: text },
+      { mode: 'next', recentDomains: s.recentDomains, askedScenes: s.askedScenes, recent: s.recentSummaries, lastAnswer: text },
       deltaSink(res),
     )
     s.currentPrompt = g.reply
     s.currentHints = g.hints
-    if (g.domain) {
-      s.recentDomains.push(g.domain)
-      if (s.recentDomains.length > 3) s.recentDomains.shift()
-    }
+    rememberScene(s, g)
     persistSessions()
     finish({ message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded })
   } catch (e) {
