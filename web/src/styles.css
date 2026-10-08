@@ -575,10 +575,26 @@ body {
 .report {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 卡片列表单独滚动(顶部标题/主题收集条固定不滚走) */
+.report-list {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding-right: 2px;
+}
+
+/* 关键:禁止 flex 压缩卡片,否则 16 张会被压扁、内容显示不全 */
+.report-list > * {
+  flex: 0 0 auto;
 }
 
 .report-head {

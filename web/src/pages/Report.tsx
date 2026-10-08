@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { HistoryEntry, Tendency } from '../lib/api.js'
 import { typeMeta, TYPE_META } from '../lib/mbti-meta.js'
 import { Mascot } from '../components/Mascot.js'
@@ -337,6 +337,19 @@ export function Report({
   const lockedCodes = allCodes.filter((c) => !unlockedCodes.includes(c))
   const orderedCodes = [...unlockedCodes, ...lockedCodes]
 
+  // 手风琴:同时只展开一个;默认展开第一个已解锁卡
+  const [openCode, setOpenCode] = useState<string>(() => unlockedCodes[0] || '')
+  const listRef = useRef<HTMLDivElement>(null)
+
+  const scrollToCard = (code: string) => {
+    requestAnimationFrame(() => {
+      const el = listRef.current?.querySelector<HTMLElement>(`[data-code="${code}"]`)
+      el?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    })
+  }
+
+  const toggle = (code: string) => setOpenCode((cur) => (cur === code ? '' : code))
+
   return (
     <div className="report">
       <div className="report-head">
@@ -377,6 +390,8 @@ export function Report({
                   if (!on) return
                   applyTypeTheme(c)
                   setActive(c)
+                  setOpenCode(c)
+                  scrollToCard(c)
                 }}
               >
                 {on ? c : '🔒'}
@@ -386,116 +401,120 @@ export function Report({
         </div>
       </div>
 
-      {unlockedCodes.length === 0 && (
-        <p className="report-empty">还没有完成的测评 —— 去「测评」聊一轮，点亮你的第一个类型吧。</p>
-      )}
+      <div className="report-list" ref={listRef}>
+        {unlockedCodes.length === 0 && (
+          <p className="report-empty">还没有完成的测评 —— 去「测评」聊一轮，点亮你的第一个类型吧。</p>
+        )}
 
-      {orderedCodes.map((code, i) => {
-        const meta = TYPE_META[code]
-        const entries = byType.get(code) || []
-        const hasData = entries.length > 0
-        const e = entries[0]
+        {orderedCodes.map((code) => {
+          const meta = TYPE_META[code]
+          const entries = byType.get(code) || []
+          const hasData = entries.length > 0
+          const e = entries[0]
+          const isOpen = openCode === code
 
-        if (!hasData) {
+          if (!hasData) {
+            return (
+              <details
+                key={code}
+                className="report-item locked"
+                data-code={code}
+                data-theme="aurora"
+                data-atype={code}
+                open={isOpen}
+              >
+                <summary onClick={(ev) => { ev.preventDefault(); toggle(code) }}>
+                  <span className="report-sum-left">
+                    <Mascot code={code} variant="avatar" size={40} />
+                    <b className="report-code">{code}</b>
+                    <span className="report-name">
+                      {meta.name} · {meta.alias}
+                    </span>
+                  </span>
+                  <span className="report-lock">🔒 未解锁</span>
+                </summary>
+                <div className="report-body">
+                  <Mascot code={code} variant="banner" />
+                  <p className="report-locked-note">
+                    还没测过这个类型。测出 <b>{code}</b>（{meta.name}）后，这里就会点亮。
+                  </p>
+                  <div className="report-actions">
+                    <button className="btn" onClick={onGoTest}>
+                      去测一测
+                    </button>
+                  </div>
+                </div>
+              </details>
+            )
+          }
+
           return (
             <details
               key={code}
-              className="report-item locked"
+              className="report-item"
+              data-code={code}
               data-theme="aurora"
               data-atype={code}
+              open={isOpen}
             >
-              <summary>
+              <summary onClick={(ev) => { ev.preventDefault(); toggle(code) }}>
                 <span className="report-sum-left">
-                  <Mascot code={code} variant="avatar" size={44} />
+                  <Mascot code={code} variant="avatar" size={40} />
                   <b className="report-code">{code}</b>
                   <span className="report-name">
                     {meta.name} · {meta.alias}
                   </span>
+                  {entries.length > 1 && <span className="report-count">共 {entries.length} 次</span>}
                 </span>
-                <span className="report-lock">🔒 未解锁</span>
+                <span className="report-date">{fmt(e.at)}</span>
               </summary>
               <div className="report-body">
                 <Mascot code={code} variant="banner" />
-                <p className="report-locked-note">
-                  还没测过这个类型。测出 <b>{code}</b>（{meta.name}）后，这里就会点亮。
-                </p>
+                {e.tendencies?.length > 0 && (
+                  <div className="rbars">
+                    {e.tendencies.map((t) => (
+                      <Bar key={t.dim} t={t} />
+                    ))}
+                  </div>
+                )}
+                {e.summary && <p className="report-summary">{e.summary}</p>}
                 <div className="report-actions">
-                  <button className="btn" onClick={onGoTest}>
-                    去测一测
+                  <button
+                    className="btn"
+                    disabled={busy === code}
+                    onClick={async () => {
+                      setBusy(code)
+                      try {
+                        await shareImage(e)
+                      } finally {
+                        setBusy(null)
+                      }
+                    }}
+                  >
+                    {busy === code ? '生成中…' : '保存报告图片'}
+                  </button>
+                  <button
+                    className="btn ghost"
+                    onClick={() => {
+                      applyTypeTheme(code)
+                      setActive(code)
+                    }}
+                  >
+                    应用此风格
+                  </button>
+                  <button className="btn ghost" onClick={() => navigator.clipboard.writeText(`我的性格类型：${code}`)}>
+                    复制类型
                   </button>
                 </div>
               </div>
             </details>
           )
-        }
+        })}
 
-        return (
-          <details
-            key={code}
-            className="report-item"
-            open={i === 0}
-            data-theme="aurora"
-            data-atype={code}
-          >
-            <summary>
-              <span className="report-sum-left">
-                <Mascot code={code} variant="avatar" size={44} />
-                <b className="report-code">{code}</b>
-                {meta && (
-                  <span className="report-name">
-                    {meta.name} · {meta.alias}
-                  </span>
-                )}
-                {entries.length > 1 && <span className="report-count">共 {entries.length} 次</span>}
-              </span>
-              <span className="report-date">{fmt(e.at)}</span>
-            </summary>
-            <div className="report-body">
-              <Mascot code={code} variant="banner" />
-              {e.tendencies?.length > 0 && (
-                <div className="rbars">
-                  {e.tendencies.map((t) => (
-                    <Bar key={t.dim} t={t} />
-                  ))}
-                </div>
-              )}
-              {e.summary && <p className="report-summary">{e.summary}</p>}
-              <div className="report-actions">
-                <button
-                  className="btn"
-                  disabled={busy === code}
-                  onClick={async () => {
-                    setBusy(code)
-                    try {
-                      await shareImage(e)
-                    } finally {
-                      setBusy(null)
-                    }
-                  }}
-                >
-                  {busy === code ? '生成中…' : '保存报告图片'}
-                </button>
-                <button
-                  className="btn ghost"
-                  onClick={() => {
-                    applyTypeTheme(code)
-                    setActive(code)
-                  }}
-                >
-                  应用此风格
-                </button>
-                <button className="btn ghost" onClick={() => navigator.clipboard.writeText(`我的性格类型：${code}`)}>
-                  复制类型
-                </button>
-              </div>
-            </div>
-          </details>
-        )
-      })}
-
-      <p className="disclaimer">
-        本测评基于 MBTI 理论，用于自我探索，不作为心理诊断、医疗、就业或其他关键决策的唯一依据。
-      </p>
+        <p className="disclaimer">
+          本测评基于 MBTI 理论，用于自我探索，不作为心理诊断、医疗、就业或其他关键决策的唯一依据。
+        </p>
+      </div>
     </div>
   )
 }
