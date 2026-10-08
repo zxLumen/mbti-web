@@ -26,6 +26,7 @@ export function createSession(id: string): SessionState {
     recentDomains: [],
     askedScenes: [],
     recentSummaries: [],
+    answerEvidence: [],
     qCount: 0,
     minQ: 12,
     maxQ: 30,

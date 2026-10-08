@@ -54,6 +54,8 @@ export interface SessionState {
   askedScenes: string[]
   /** 最近几轮问答摘要,用于承接 */
   recentSummaries: string[]
+  /** 作答证据(维度/得分/回答摘要),仅用于生成报告,不落历史 */
+  answerEvidence: { dim: Dim; score: number; text: string }[]
   qCount: number
   minQ: number
   maxQ: number

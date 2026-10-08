@@ -206,12 +206,14 @@ export function TestPage({
         streamRef.current = ''
         if (p.progress) setProgress(p.progress)
         if (p.done) {
-          const summaryText = p.summary || full
+          const report = p.report
+          const summaryText = report?.overview || p.summary || full
           const entry: HistoryEntry = {
             code: p.resultCode || '',
             summary: summaryText,
             tendencies: p.tendencies || [],
             at: Date.now(),
+            report,
           }
           onComplete(entry)
           applyTypeTheme(entry.code)

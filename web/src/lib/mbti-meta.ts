@@ -35,3 +35,33 @@ export const TYPE_META: Record<string, TypeMeta> = {
 export function typeMeta(code: string): TypeMeta | null {
   return TYPE_META[code] || null
 }
+
+/** 认知功能中文名 */
+export const FUNC_NAMES: Record<string, string> = {
+  Ni: '内倾直觉', Ne: '外倾直觉', Si: '内倾感觉', Se: '外倾感觉',
+  Ti: '内倾思考', Te: '外倾思考', Fi: '内倾情感', Fe: '外倾情感',
+}
+
+/** 16 型的认知功能栈(主导→辅助→第三→劣势,标准顺序) */
+export const FUNCTION_STACKS: Record<string, string[]> = {
+  INTJ: ['Ni', 'Te', 'Fi', 'Se'],
+  INTP: ['Ti', 'Ne', 'Si', 'Fe'],
+  ENTJ: ['Te', 'Ni', 'Se', 'Fi'],
+  ENTP: ['Ne', 'Ti', 'Fe', 'Si'],
+  INFJ: ['Ni', 'Fe', 'Ti', 'Se'],
+  INFP: ['Fi', 'Ne', 'Si', 'Te'],
+  ENFJ: ['Fe', 'Ni', 'Se', 'Ti'],
+  ENFP: ['Ne', 'Fi', 'Te', 'Si'],
+  ISTJ: ['Si', 'Te', 'Fi', 'Ne'],
+  ISFJ: ['Si', 'Fe', 'Ti', 'Ne'],
+  ESTJ: ['Te', 'Si', 'Ne', 'Fi'],
+  ESFJ: ['Fe', 'Si', 'Ne', 'Ti'],
+  ISTP: ['Ti', 'Se', 'Ni', 'Fe'],
+  ISFP: ['Fi', 'Se', 'Ni', 'Te'],
+  ESTP: ['Se', 'Ti', 'Fe', 'Ni'],
+  ESFP: ['Se', 'Fi', 'Te', 'Ni'],
+}
+
+export function typeStack(code: string): string[] {
+  return FUNCTION_STACKS[code] || []
+}

@@ -57,12 +57,28 @@ export const CLASSIFY_SYSTEM = `你是 MBTI 倾向的判读助手。给你一个
 - 不要因为对方没说清就硬判；含糊、回避、都行 → 0。
 - 依据对方表达的自然倾向判断，而不是ta当下受情境限制的无奈选择。`
 
-/** 生成结果页的温暖解读 */
-export const RESULT_SYSTEM = `你是一位温柔的引导者。对方刚完成一次自我探索，得到了性格类型 {CODE}。
-请写一段 120～180 字的个性化解读：先温和地肯定对方，再点出这个类型的几个特点(是倾向，不是死标签)，最后给一句鼓励。
-如果给了"回答里反复出现的主题"，可自然地呼应这些主题，但不要复述原话。
-不要出现方法名或字母堆砌，不评判优劣，不做心理诊断。
-只输出严格 JSON：{"summary":"..."}`
+/** 生成结构化「专业报告」 */
+export const RESULT_SYSTEM = `你是一位严谨而温和的人格测评报告撰写者。根据对方的 MBTI 类型 {CODE} 与测评过程中的证据，生成一份**专业、具体、可落地**的报告。
+
+要求：
+- 语气专业、具体；不堆砌术语，不评判优劣，不做心理诊断，不预测职业/关系结局。
+- 每条描述都要"具体到行为"，避免空泛套话；**全部用中文**，不要夹杂英文单词。
+- 若给了"作答证据"，自然地结合进去（可呼应其倾向），但**不要复述原话**、不要暴露"在测试"。
+- 认知功能：给定该类型的四层功能栈（主导→劣势），为**每一项**写一句 ≤28 字的说明（该功能在此类型身上通常怎么表现），fn 必须与给定代号一致、顺序一致。
+
+只输出严格 JSON：
+{
+ "tagline": "一句话点题(≤18字)",
+ "keywords": ["4~6 个关键词"],
+ "overview": "2~3 句整体概述",
+ "strengths": [{"t":"优势名(≤6字)","d":"一句说明(≤30字)"}],
+ "blindspots": [{"t":"盲点名(≤6字)","d":"一句说明(≤30字)"}],
+ "stress": "压力/失衡时的表现(1~2句)",
+ "work": "工作/学习风格(1~2句)",
+ "social": "人际与沟通(1~2句)",
+ "growth": ["3 条可执行的行动建议"],
+ "cognition": [{"fn":"功能代号","note":"一句说明(≤28字)"}]
+}`
 
 export function scenarioUserPrompt(args: {
   dim: Dim
@@ -102,9 +118,24 @@ export function classifyUserPrompt(args: { dim: Dim; scenario: string; answer: s
   ].join('\n')
 }
 
-export function resultUserPrompt(args: { themes: string[] }): string {
-  if (!args.themes.length) return '请输出这段解读。'
-  return `回答里出现的主题（可自然呼应，勿复述原话）：${args.themes.join('；')}`
+export function resultUserPrompt(args: {
+  code: string
+  name: string
+  tendencies: { dim: string; posLabel: string; negLabel: string; posPct: number }[]
+  stack: string[]
+  evidence: string[]
+}): string {
+  const lines = [
+    `类型：${args.code}（${args.name}）`,
+    `四维倾向：${args.tendencies.map((t) => {
+      const p = Math.round(t.posPct)
+      return `${t.posLabel}${p}% / ${t.negLabel}${100 - p}%`
+    }).join('；')}`,
+  ]
+  if (args.stack.length) lines.push(`认知功能栈(主导→劣势)：${args.stack.join(' → ')}`)
+  if (args.evidence.length) lines.push(`作答证据(可呼应，勿复述)：\n- ${args.evidence.join('\n- ')}`)
+  lines.push('请输出这份报告。')
+  return lines.join('\n')
 }
 
 /** 兜底:为已给出的问题单独补一组参考选项(空选项时用) */

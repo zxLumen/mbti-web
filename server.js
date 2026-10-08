@@ -26,6 +26,7 @@ import {
   hintsUserPrompt,
 } from './web/src/lib/prompts.ts'
 import { isOwner, ownerToken, ownerCookieHeader } from './web/src/lib/owner.ts'
+import { TYPE_META, typeStack, FUNC_NAMES } from './web/src/lib/mbti-meta.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -532,17 +533,56 @@ async function genResult(code, themes) {
   return TYPE_BLURB[code] || '你的回答里藏着一套属于自己的方式。愿它帮你更温柔地理解自己。'
 }
 
-/** 流式版结果解读:把 summary 边生成边推给前端 */
-async function genResultStream(code, themes, onDelta) {
-  const { content } = await streamLLM(
+/** 生成结构化专业报告(非流式;LLM 写文案,认知栈名称/顺序用静态表兜底) */
+async function genReport(code, tend, evidence) {
+  const stack = typeStack(code)
+  const meta = TYPE_META[code]
+  const raw = await callLLMJson(
     RESULT_SYSTEM.replace('{CODE}', code),
-    resultUserPrompt({ themes }),
-    { temperature: 0.8, maxTokens: 1600, field: 'summary' },
-    onDelta,
+    resultUserPrompt({
+      code,
+      name: meta ? `${meta.name}·${meta.alias}` : code,
+      tendencies: tend || [],
+      stack,
+      evidence: evidence || [],
+    }),
+    { temperature: 0.7, maxTokens: 2400 },
   )
-  const parsed = content ? extractJson(content) : null
-  if (parsed && typeof parsed.summary === 'string' && parsed.summary.trim()) return parsed.summary.trim()
-  return TYPE_BLURB[code] || '你的回答里藏着一套属于自己的方式。愿它帮你更温柔地理解自己。'
+  return normalizeReport(code, raw, stack)
+}
+
+function normalizeReport(code, raw, stack) {
+  const r = raw && typeof raw === 'object' ? raw : {}
+  const notes = new Map(
+    (Array.isArray(r.cognition) ? r.cognition : []).map((x) => [x && x.fn, String((x && x.note) || '')]),
+  )
+  const cognition = stack.map((fn, i) => ({
+    fn,
+    name: FUNC_NAMES[fn] || fn,
+    level: 4 - i,
+    note: (notes.get(fn) || '').slice(0, 60),
+  }))
+  const arr = (v, n) => (Array.isArray(v) ? v : []).slice(0, n)
+  const pts = (v, n) =>
+    arr(v, n)
+      .map((x) => ({ t: String((x && x.t) || '').slice(0, 12), d: String((x && x.d) || '').slice(0, 60) }))
+      .filter((x) => x.t || x.d)
+  const report = {
+    tagline: String(r.tagline || '').slice(0, 30),
+    keywords: arr(r.keywords, 6).map((k) => String(k).slice(0, 10)).filter(Boolean),
+    overview: String(r.overview || '').slice(0, 300),
+    strengths: pts(r.strengths, 4),
+    blindspots: pts(r.blindspots, 3),
+    stress: String(r.stress || '').slice(0, 200),
+    work: String(r.work || '').slice(0, 200),
+    social: String(r.social || '').slice(0, 200),
+    growth: arr(r.growth, 3).map((g) => String(g).slice(0, 80)).filter(Boolean),
+    cognition,
+  }
+  if (!report.overview && !report.strengths.length) {
+    report.overview = TYPE_BLURB[code] || '你的回答里藏着一套属于自己的方式。愿它帮你更温柔地理解自己。'
+  }
+  return report
 }
 
 // ---------- 路由 ----------
@@ -624,21 +664,25 @@ app.post('/api/mbti/answer', async (req, res) => {
     stats.answer++
     s.recentSummaries.push(`第${s.qCount}轮（${DIM_INFO[probe.dim].topic}）：${(text || '').slice(0, 40)}`)
     if (s.recentSummaries.length > 3) s.recentSummaries.shift()
+    s.answerEvidence = [...(s.answerEvidence || []), { dim: probe.dim, score, text: (text || '').slice(0, 40) }].slice(-12)
 
     if (canEnd(s)) {
       s.done = true
       s.resultCode = computeType(s)
       stats.done++
       stats.perCode[s.resultCode] = (stats.perCode[s.resultCode] || 0) + 1
-      const summary = await genResultStream(s.resultCode, s.recentSummaries, deltaSink(res))
-      s.resultSummary = summary
-      s.resultTendencies = tendencies(s)
+      const tend = tendencies(s)
+      const evidence = (s.answerEvidence || []).map((ev) => `${DIM_INFO[ev.dim].topic}｜${ev.text}`)
+      const report = await genReport(s.resultCode, tend, evidence)
+      s.resultSummary = report.overview
+      s.resultTendencies = tend
       persistSessions()
       return finish({
         done: true,
         resultCode: s.resultCode,
-        summary,
-        tendencies: s.resultTendencies,
+        summary: report.overview,
+        report,
+        tendencies: tend,
         progress: progressOf(s),
         conf: s.conf,
       })
@@ -660,6 +704,17 @@ app.post('/api/mbti/answer', async (req, res) => {
     persistSessions()
     finish({ message: '刚才没接上，能再说一次吗？', hints: [], progress: progressOf(s), conf: s.conf, degraded: true })
   }
+})
+
+// 老记录补全报告(或重新生成):只需 code + tendencies,可选 evidence
+app.post('/api/mbti/report', async (req, res) => {
+  const b = req.body || {}
+  const code = String(b.code || '')
+  if (!/^[A-Z]{4}$/.test(code) || !TYPE_META[code]) return res.status(400).json({ error: 'bad_code' })
+  const tend = Array.isArray(b.tendencies) ? b.tendencies : []
+  const evidence = Array.isArray(b.evidence) ? b.evidence.slice(0, 12).map((x) => String(x).slice(0, 60)) : []
+  const report = await genReport(code, tend, evidence)
+  res.json({ report })
 })
 
 app.post('/api/mbti/reset', (req, res) => {

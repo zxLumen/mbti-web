@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { api } from '../lib/api.js'
 import type { HistoryEntry, Tendency } from '../lib/api.js'
 import { typeMeta, TYPE_META } from '../lib/mbti-meta.js'
 import { Mascot } from '../components/Mascot.js'
@@ -71,6 +72,54 @@ function typeVars(code: string): Record<string, string> {
   return out
 }
 
+/** 四维「清晰度」雷达图:半径=该维明确程度,标签=主导侧 */
+function Radar({ tendencies }: { tendencies: Tendency[] }) {
+  const R = 76
+  const CX = 100
+  const CY = 100
+  const dims: Array<[string, number]> = [
+    ['EI', -90],
+    ['SN', 0],
+    ['TF', 90],
+    ['JP', 180],
+  ]
+  const at = (ang: number, r: number) => {
+    const a = (ang * Math.PI) / 180
+    return [CX + Math.cos(a) * r, CY + Math.sin(a) * r] as const
+  }
+  const rows = dims.map(([d, ang]) => ({ ang, t: tendencies.find((x) => x.dim === d) }))
+  const pts = rows
+    .map(({ ang, t }) => {
+      const clarity = t ? Math.min(1, Math.abs((t.posPct - 50) / 50)) : 0
+      const [x, y] = at(ang, 14 + clarity * (R - 14))
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    })
+    .join(' ')
+  return (
+    <svg className="radar" viewBox="-42 -16 284 232" role="img" aria-label="四维清晰度">
+      {[0.34, 0.67, 1].map((f) => (
+        <circle key={f} cx={CX} cy={CY} r={R * f} className="radar-ring" />
+      ))}
+      {rows.map(({ ang }, i) => {
+        const [x, y] = at(ang, R)
+        return <line key={i} x1={CX} y1={CY} x2={x} y2={y} className="radar-axis" />
+      })}
+      <polygon points={pts} className="radar-area" />
+      {rows.map(({ ang, t }, i) => {
+        const [lx, ly] = at(ang, R + 18)
+        const dom = t ? (t.posPct >= 50 ? t.posLabel : t.negLabel) : ''
+        const p = t ? Math.round(t.posPct >= 50 ? t.posPct : 100 - t.posPct) : 0
+        return (
+          <text key={i} x={lx} y={ly} className="radar-label" textAnchor="middle" dominantBaseline="middle">
+            {dom}
+            {p ? ` ${p}%` : ''}
+          </text>
+        )
+      })}
+    </svg>
+  )
+}
+
 async function loadMascotImage(code: string): Promise<HTMLImageElement | null> {
   for (const ext of ['svg', 'png', 'webp']) {
     const ok = await new Promise<HTMLImageElement | null>((res) => {
@@ -87,7 +136,7 @@ async function loadMascotImage(code: string): Promise<HTMLImageElement | null> {
 /** 把一条结果画成一张好看的 PNG 报告 */
 async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
   const W = 900
-  const H = 1480
+  const H = 1800
   const c = document.createElement('canvas')
   c.width = W
   c.height = H
@@ -159,12 +208,18 @@ async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
     ctx.font = font(36, 600)
     ctx.fillText(`${meta.name} · ${meta.alias}`, PAD, NAME_Y)
   }
+  const kws = (e.report?.keywords || []).slice(0, 6)
+  if (kws.length) {
+    ctx.fillStyle = dim
+    ctx.font = font(26, 600)
+    ctx.fillText(kws.join(' · '), PAD, NAME_Y + 46)
+  }
 
   // 维度条(中心分割;说明文字画在条下方,避免溢出画布)
   const barX = PAD + 116
   const barW = W - PAD * 2 - 116 * 2
   const midX = barX + barW / 2
-  let y = 770
+  let y = 812
   for (const t of e.tendencies || []) {
     const v = (clamp(t.posPct, 0, 100) - 50) / 50
     const dom: 'pos' | 'neg' = v >= 0 ? 'pos' : 'neg'
@@ -198,7 +253,27 @@ async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
     y += 96
   }
 
-  // 解读
+  // 优势 3 条
+  const st = (e.report?.strengths || []).slice(0, 3)
+  if (st.length) {
+    ctx.textAlign = 'left'
+    ctx.fillStyle = fg
+    ctx.font = font(28, 700)
+    ctx.fillText('优势倾向', PAD, y + 20)
+    y += 62
+    for (const s2 of st) {
+      ctx.fillStyle = accent
+      ctx.font = font(27, 700)
+      ctx.fillText('· ' + s2.t, PAD, y)
+      ctx.fillStyle = fg
+      ctx.font = font(25, 400)
+      const tw = ctx.measureText('· ' + s2.t + '  ').width
+      ctx.fillText(s2.d, PAD + tw, y)
+      y += 44
+    }
+  }
+
+  // 解读(概览)
   ctx.textAlign = 'left'
   ctx.fillStyle = fg
   ctx.font = font(30, 400)
@@ -310,10 +385,12 @@ export function Report({
   history,
   onClear,
   onGoTest,
+  onUpdate,
 }: {
   history: HistoryEntry[]
   onClear: () => void
   onGoTest: () => void
+  onUpdate: (at: number, patch: Partial<HistoryEntry>) => void
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [active, setActive] = useState<string>(() => readAtype())
@@ -349,6 +426,24 @@ export function Report({
   }
 
   const toggle = (code: string) => setOpenCode((cur) => (cur === code ? '' : code))
+
+  // 老记录(缺 report):后台逐条补全并落盘
+  const pending = useRef<Set<number>>(new Set())
+  useEffect(() => {
+    const missing = history.filter((e) => !e.report && TYPE_META[e.code] && !pending.current.has(e.at))
+    if (!missing.length) return
+    ;(async () => {
+      for (const e of missing) {
+        pending.current.add(e.at)
+        try {
+          const r = await api.report(e.code, e.tendencies || [])
+          if (r.report) onUpdate(e.at, { report: r.report, summary: r.report.overview || e.summary })
+        } catch {
+          /* 忽略,下次再试 */
+        }
+      }
+    })()
+  }, [history, onUpdate])
 
   return (
     <div className="report">
@@ -470,14 +565,115 @@ export function Report({
               </summary>
               <div className="report-body">
                 <Mascot code={code} variant="banner" />
+
+                {e.report ? (
+                  <>
+                    {e.report.tagline && <p className="rep-tagline">{e.report.tagline}</p>}
+                    {e.report.overview && <p className="report-summary">{e.report.overview}</p>}
+                    {e.report.keywords?.length > 0 && (
+                      <div className="rep-keywords">
+                        {e.report.keywords.map((k, ki) => (
+                          <span key={ki} className="rep-kw">
+                            {k}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="report-summary">{e.summary || '正在生成完整报告…'}</p>
+                )}
+
                 {e.tendencies?.length > 0 && (
-                  <div className="rbars">
-                    {e.tendencies.map((t) => (
-                      <Bar key={t.dim} t={t} />
-                    ))}
+                  <div className="rep-visual">
+                    <Radar tendencies={e.tendencies} />
+                    <div className="rbars">
+                      {e.tendencies.map((t) => (
+                        <Bar key={t.dim} t={t} />
+                      ))}
+                    </div>
                   </div>
                 )}
-                {e.summary && <p className="report-summary">{e.summary}</p>}
+
+                {e.report && (
+                  <>
+                    {e.report.cognition?.length > 0 && (
+                      <div className="rep-block">
+                        <div className="rep-h">认知功能栈</div>
+                        {e.report.cognition.map((c) => (
+                          <div key={c.fn} className="cog-row">
+                            <span className="cog-fn">
+                              {c.fn}
+                              <i>{c.name}</i>
+                            </span>
+                            <div className="cog-track">
+                              <div className="cog-fill" style={{ width: (c.level / 4) * 100 + '%' }} />
+                            </div>
+                            <span className="cog-note">{c.note}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {(e.report.strengths?.length > 0 || e.report.blindspots?.length > 0) && (
+                      <div className="rep-cols">
+                        <div className="rep-col">
+                          <div className="rep-h">优势倾向</div>
+                          {e.report.strengths.map((s, si) => (
+                            <div key={si} className="pt">
+                              <b>{s.t}</b>
+                              <span>{s.d}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="rep-col">
+                          <div className="rep-h">可能的盲点</div>
+                          {e.report.blindspots.map((s, si) => (
+                            <div key={si} className="pt">
+                              <b>{s.t}</b>
+                              <span>{s.d}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {(e.report.work || e.report.social || e.report.stress) && (
+                      <div className="rep-cards">
+                        {e.report.work && (
+                          <div className="rep-card">
+                            <div className="rep-h">工作 / 学习</div>
+                            <p>{e.report.work}</p>
+                          </div>
+                        )}
+                        {e.report.social && (
+                          <div className="rep-card">
+                            <div className="rep-h">人际 / 沟通</div>
+                            <p>{e.report.social}</p>
+                          </div>
+                        )}
+                        {e.report.stress && (
+                          <div className="rep-card">
+                            <div className="rep-h">压力下的表现</div>
+                            <p>{e.report.stress}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {e.report.growth?.length > 0 && (
+                      <div className="rep-block">
+                        <div className="rep-h">行动建议</div>
+                        <ol className="rep-growth">
+                          {e.report.growth.map((g, gi) => (
+                            <li key={gi}>{g}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                  </>
+                )}
+
                 <div className="report-actions">
                   <button
                     className="btn"

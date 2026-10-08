@@ -18,6 +18,8 @@ export function App() {
   }, [])
 
   const addEntry = (e: HistoryEntry) => setHistory((h) => writeHistory([e, ...h]))
+  const updateEntry = (at: number, patch: Partial<HistoryEntry>) =>
+    setHistory((h) => writeHistory(h.map((e) => (e.at === at ? { ...e, ...patch } : e))))
   const onClear = () => {
     clearHistory()
     setHistory([])
@@ -40,7 +42,7 @@ export function App() {
         <TestPage onComplete={addEntry} onViewReport={() => setTab('report')} />
       </div>
       <div style={{ display: tab === 'report' ? 'contents' : 'none' }}>
-        <Report history={history} onClear={onClear} onGoTest={() => setTab('test')} />
+        <Report history={history} onClear={onClear} onGoTest={() => setTab('test')} onUpdate={updateEntry} />
       </div>
       <div style={{ display: tab === 'settings' ? 'contents' : 'none' }}>
         <SettingsPage />

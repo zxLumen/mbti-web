@@ -33,12 +33,37 @@ export interface Tendency {
   posPct: number
 }
 
+/** 结构化报告(专业版) */
+export interface ReportPoint {
+  t: string
+  d: string
+}
+export interface CognitionItem {
+  fn: string
+  name: string
+  level: number
+  note: string
+}
+export interface StructuredReport {
+  tagline: string
+  keywords: string[]
+  overview: string
+  strengths: ReportPoint[]
+  blindspots: ReportPoint[]
+  stress: string
+  work: string
+  social: string
+  growth: string[]
+  cognition: CognitionItem[]
+}
+
 /** 一次完成的测评结果(存在 localStorage,供「报告」页查看) */
 export interface HistoryEntry {
   code: string
   summary: string
   tendencies: Tendency[]
   at: number
+  report?: StructuredReport
 }
 
 export interface TurnResp {
@@ -50,6 +75,7 @@ export interface TurnResp {
   resultCode?: string
   summary?: string
   tendencies?: Tendency[]
+  report?: StructuredReport
   progress: Progress
   conf: Conf
   degraded?: boolean
@@ -65,6 +91,8 @@ export const api = {
     fetch(`/api/mbti/session?id=${encodeURIComponent(id)}`).then(async (r) =>
       r.ok ? ((await r.json()) as TurnResp) : null,
     ),
+  report: (code: string, tendencies: Tendency[]) =>
+    post<{ report?: StructuredReport }>('/api/mbti/report', { code, tendencies }),
   saveSettings: (s: Partial<AppSettings> & { apiKey?: string }) =>
     post<{ ok?: boolean; hasKey?: boolean; error?: string; message?: string }>('/api/settings', s),
 }
