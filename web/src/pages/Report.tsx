@@ -50,7 +50,7 @@ function Bar({ t }: { t: Tendency }) {
 }
 
 async function loadMascotImage(code: string): Promise<HTMLImageElement | null> {
-  for (const ext of ['png', 'webp', 'svg']) {
+  for (const ext of ['svg', 'png', 'webp']) {
     const ok = await new Promise<HTMLImageElement | null>((res) => {
       const img = new Image()
       img.onload = () => res(img)
@@ -65,7 +65,7 @@ async function loadMascotImage(code: string): Promise<HTMLImageElement | null> {
 /** 把一条结果画成一张好看的 PNG 报告 */
 async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
   const W = 900
-  const H = 1160
+  const H = 1480
   const c = document.createElement('canvas')
   c.width = W
   c.height = H
@@ -93,36 +93,43 @@ async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
   ctx.font = font(26, 600)
   ctx.fillText('心语 · 对话式 MBTI 测评', PAD, 96)
 
-  // 小人(优先图片,否则 emoji)
+  // 顶部横幅插画(16P 场景图 900x350,按 cover 裁切)
   const img = meta ? await loadMascotImage(e.code) : null
-  const mascotY = 130
+  const bannerY = 124
+  const bannerW = W - PAD * 2
+  const bannerH = 210
   if (img) {
-    const s = 190
-    ctx.drawImage(img, W - PAD - s, mascotY, s, s)
+    drawCover(ctx, img, PAD, bannerY, bannerW, bannerH)
   } else if (meta) {
-    ctx.font = font(170)
-    ctx.textAlign = 'right'
-    ctx.fillText(meta.emoji, W - PAD, mascotY + 160)
+    ctx.fillStyle = hexA(accent, 0.18)
+    roundRect(ctx, PAD, bannerY, bannerW, bannerH, 24)
+    ctx.fill()
+    ctx.font = font(120)
+    ctx.textAlign = 'center'
+    ctx.fillText(meta.emoji, W / 2, bannerY + 158)
     ctx.textAlign = 'left'
   }
 
+  const TYPE_Y = 410
+  const CODE_Y = 612
+  const NAME_Y = 676
   ctx.fillStyle = '#c9cff0'
   ctx.font = font(30, 500)
-  ctx.fillText('我的性格类型', PAD, 196)
+  ctx.fillText('我的性格类型', PAD, TYPE_Y)
   ctx.fillStyle = '#ffffff'
-  ctx.font = font(180, 800)
-  ctx.fillText(e.code || '—', PAD - 6, 366)
+  ctx.font = font(190, 800)
+  ctx.fillText(e.code || '—', PAD - 6, CODE_Y)
   if (meta) {
     ctx.fillStyle = accent
     ctx.font = font(36, 600)
-    ctx.fillText(`${meta.name} · ${meta.alias}`, PAD, 420)
+    ctx.fillText(`${meta.name} · ${meta.alias}`, PAD, NAME_Y)
   }
 
-  // 维度条(中心分割)
-  let y = 520
-  const barX = PAD + 130
-  const barW = W - PAD * 2 - 130 - 96
+  // 维度条(中心分割;说明文字画在条下方,避免溢出画布)
+  const barX = PAD + 116
+  const barW = W - PAD * 2 - 116 * 2
   const midX = barX + barW / 2
+  let y = 770
   for (const t of e.tendencies || []) {
     const v = (clamp(t.posPct, 0, 100) - 50) / 50
     const dom: 'pos' | 'neg' = v >= 0 ? 'pos' : 'neg'
@@ -132,40 +139,40 @@ async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
     ctx.fillStyle = '#c9cff0'
     ctx.font = font(28, 600)
     ctx.textAlign = 'right'
-    ctx.fillText(t.posLabel, barX - 24, y + 10)
+    ctx.fillText(t.posLabel, barX - 20, y + 8)
     ctx.textAlign = 'left'
-    ctx.fillText(t.negLabel, barX + barW + 24, y + 10)
+    ctx.fillText(t.negLabel, barX + barW + 20, y + 8)
     // 轨道
     ctx.fillStyle = '#232a4f'
-    roundRect(ctx, barX, y - 8, barW, 22, 11)
+    roundRect(ctx, barX, y - 10, barW, 22, 11)
     ctx.fill()
     // 中心分割填充
     const segW = (barW * Math.abs(v)) / 2
     ctx.fillStyle = dom === 'pos' ? '#7aa2ff' : '#f472b6'
-    if (dom === 'pos') roundRect(ctx, midX, y - 8, segW, 22, 11)
-    else roundRect(ctx, midX - segW, y - 8, segW, 22, 11)
+    if (dom === 'pos') roundRect(ctx, midX, y - 10, segW, 22, 11)
+    else roundRect(ctx, midX - segW, y - 10, segW, 22, 11)
     ctx.fill()
     // 中心线
     ctx.fillStyle = '#3a4270'
-    ctx.fillRect(midX - 1, y - 12, 2, 30)
-    // 说明
+    ctx.fillRect(midX - 1, y - 14, 2, 30)
+    // 说明(条下方)
     ctx.fillStyle = '#8f96c8'
     ctx.font = font(24, 600)
     ctx.textAlign = 'left'
-    ctx.fillText(`${domLabel} · ${strengthWord(v)} ${pctText}`, barX + barW + 24 + 150, y + 10)
-    y += 82
+    ctx.fillText(`${domLabel} · ${strengthWord(v)} ${pctText}`, barX, y + 42)
+    y += 96
   }
 
   // 解读
   ctx.textAlign = 'left'
   ctx.fillStyle = '#e6e9f5'
   ctx.font = font(30, 400)
-  y += 20
+  y += 46
   const maxW = W - PAD * 2
   for (const line of wrap(ctx, e.summary || '', maxW)) {
     ctx.fillText(line, PAD, y)
     y += 46
-    if (y > H - 130) break
+    if (y > H - 150) break
   }
 
   ctx.fillStyle = '#6b72a0'
@@ -184,6 +191,38 @@ function hexA(hex: string, a: number): string {
   const g = (n >> 8) & 255
   const b = n & 255
   return `rgba(${r},${g},${b},${a})`
+}
+
+/** 等比 cover 裁切绘制(横幅插画 → 任意矩形),带圆角裁切 */
+function drawCover(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  const iw = img.naturalWidth || 900
+  const ih = img.naturalHeight || 350
+  const sa = iw / ih
+  const da = w / h
+  let sw = iw
+  let sh = ih
+  let sx = 0
+  let sy = 0
+  if (da > sa) {
+    sw = ih * da
+    sx = (iw - sw) / 2
+  } else {
+    sh = iw / da
+    sy = (ih - sh) / 2
+  }
+  ctx.save()
+  ctx.beginPath()
+  roundRect(ctx, x, y, w, h, 24)
+  ctx.clip()
+  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h)
+  ctx.restore()
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -269,7 +308,7 @@ export function Report({
           <details key={e.at} className="report-item" open={i === 0}>
             <summary>
               <span className="report-sum-left">
-                <Mascot code={e.code} size={44} />
+                <span className="report-emoji">{meta?.emoji || '·'}</span>
                 <b className="report-code">{e.code || '—'}</b>
                 {meta && (
                   <span className="report-name">
@@ -280,6 +319,7 @@ export function Report({
               <span className="report-date">{fmt(e.at)}</span>
             </summary>
             <div className="report-body">
+              <Mascot code={e.code} variant="banner" />
               {e.tendencies?.length > 0 && (
                 <div className="rbars">
                   {e.tendencies.map((t) => (

@@ -311,7 +311,7 @@ export function TestPage({
       {done && (
         <div className="result-wrap">
           <div className="card done-card">
-            <Mascot code={resultCode} size={120} />
+            <Mascot code={resultCode} variant="banner" />
             <h1 style={{ textAlign: 'center' }}>这一轮聊完啦</h1>
             <div className="result-code">{resultCode}</div>
             {typeMeta(resultCode) && (
