@@ -1520,3 +1520,28 @@ body {
 .tchip:disabled {
   cursor: not-allowed;
 }
+
+
+/* 未解锁的报告卡:置灰,但可点开查看 */
+.report-item.locked {
+  opacity: 0.62;
+  filter: grayscale(0.78);
+}
+
+.report-lock {
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.report-locked-note {
+  margin: 0;
+  color: var(--fg);
+  opacity: 0.9;
+  font-size: 13px;
+}
+
+.report-count {
+  margin-left: 6px;
+  color: var(--dim);
+  font-size: 12px;
+}
