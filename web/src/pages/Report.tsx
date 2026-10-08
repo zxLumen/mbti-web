@@ -149,8 +149,8 @@ async function makeReportImage(e: HistoryEntry): Promise<Blob | null> {
     // 中心分割填充
     const segW = (barW * Math.abs(v)) / 2
     ctx.fillStyle = dom === 'pos' ? '#7aa2ff' : '#f472b6'
-    if (dom === 'pos') roundRect(ctx, midX, y - 10, segW, 22, 11)
-    else roundRect(ctx, midX - segW, y - 10, segW, 22, 11)
+    if (dom === 'pos') roundRect(ctx, midX - segW, y - 10, segW, 22, 11)
+    else roundRect(ctx, midX, y - 10, segW, 22, 11)
     ctx.fill()
     // 中心线
     ctx.fillStyle = '#3a4270'

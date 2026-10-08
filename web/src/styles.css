@@ -547,15 +547,15 @@ body {
 }
 
 .rseg.pos {
-  left: 50%;
+  right: 50%;
   background: #7aa2ff;
-  border-radius: 0 999px 999px 0;
+  border-radius: 999px 0 0 999px;
 }
 
 .rseg.neg {
-  right: 50%;
+  left: 50%;
   background: #f472b6;
-  border-radius: 999px 0 0 999px;
+  border-radius: 0 999px 999px 0;
 }
 
 .rbar-cap {
