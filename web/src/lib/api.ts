@@ -5,6 +5,7 @@ export interface AppSettings {
   maxTokens: number
   temperature: number
   hasKey?: boolean
+  isOwner?: boolean
 }
 
 async function post<T>(url: string, body: unknown): Promise<T> {
@@ -42,6 +43,7 @@ export interface TurnResp {
   tendencies?: Tendency[]
   progress: Progress
   conf: Conf
+  degraded?: boolean
 }
 
 export const api = {
@@ -50,5 +52,6 @@ export const api = {
   reset: (sessionId: string) => post<{ ok: boolean }>('/api/mbti/reset', { sessionId }),
   stats: (p: { type: string; code?: string }) => post<{ ok: boolean }>('/api/mbti/stats', p).catch(() => ({ ok: false })),
   getSettings: () => fetch('/api/settings').then((r) => r.json() as Promise<AppSettings>),
-  saveSettings: (s: Partial<AppSettings> & { apiKey?: string }) => post<{ ok: boolean; hasKey: boolean }>('/api/settings', s),
+  saveSettings: (s: Partial<AppSettings> & { apiKey?: string }) =>
+    post<{ ok?: boolean; hasKey?: boolean; error?: string; message?: string }>('/api/settings', s),
 }

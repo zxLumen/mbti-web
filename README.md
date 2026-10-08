@@ -50,8 +50,18 @@ npm run watch      # 仅后端改动时自动重启(node --watch)
 | confT | 0.85 | 四维置信度阈值(每维约 5 道一致作答即可达标) |
 | TTL | 45min | 会话(内存)过期时间 |
 
-## 配置
+## 配置（仅站长）
 
-设置页 `/`→「设置」选择服务商并保存(服务端存 `data/settings.json` + `data/keys.json`）。
-可选：`ZX_GATEWAY_BASE_URL` 环境变量为 `zxGateway` 提供默认地址。未配置时测评仍可用,
-只按 A/B/不确定做规则归类。
+设置页「设置」读写服务端配置(`data/settings.json` + `data/keys.json`)。**只有站长可修改**：
+`POST /api/settings` 会校验站长身份,非站长返回 `403`;非站长看到的是只读视图。
+
+站长判定（对齐 luminari/Opentodo 等子应用）：
+- 博客的 `zx_admin` cookie 用**共享的 `SESSION_SECRET`** 验签 → 已登录博客即视为站长
+  （生产 `ADMIN_COOKIE_DOMAIN=.zxlumen.cn`；本地 host-only、跨端口共享）。
+- 兜底：`MBTI_OWNER_TOKEN` 或 `data/owner.token`；访问 `/?owner=<token>` 可种下 `mbti_owner` cookie。
+
+网关地址：`zxGateway` 时 `settings.baseURL` → `ZX_AI_GATEWAY_URL`（线上 `http://app:3000/api/ai/v1`）
+→ `ZX_GATEWAY_BASE_URL` → 本地默认 `http://localhost:3000/api/ai/v1`；token 取 `settings.apiKey`
+/ `data/keys.json`，兜底 `ZX_AI_APP_TOKEN`。未取到模型时返回 `degraded:true`，前端提示「简易模式」并回退题库题。
+
+环境变量（`mbti-web/.env.local`，已 gitignore）：`SESSION_SECRET`（与博客一致）。

@@ -7,6 +7,7 @@ export function TestPage() {
   const [msgs, setMsgs] = useState<Array<{ role: 'ai' | 'user'; text: string }>>([])
   const [input, setInput] = useState('')
   const [hints, setHints] = useState<string[]>([])
+  const [degraded, setDegraded] = useState(false)
   const [progress, setProgress] = useState<Progress>({ qCount: 0, minQ: 12, maxQ: 30 })
   const [thinking, setThinking] = useState(false)
   const [done, setDone] = useState(false)
@@ -33,6 +34,7 @@ export function TestPage() {
     setProgress(r.progress)
     if (r.message) setMsgs([{ role: 'ai', text: r.message }])
     setHints(r.hints || [])
+    setDegraded(Boolean(r.degraded))
     setThinking(false)
     setTimeout(() => inputRef.current?.focus(), 50)
   }
@@ -59,6 +61,7 @@ export function TestPage() {
     } else {
       if (r.message) setMsgs((m) => [...m, { role: 'ai', text: r.message as string }])
       setHints(r.hints || [])
+      setDegraded(Boolean(r.degraded))
     }
     setThinking(false)
     setTimeout(() => inputRef.current?.focus(), 50)
@@ -79,6 +82,9 @@ export function TestPage() {
               <div className="progress-fill" style={{ width: pct + '%' }} />
             </div>
             <div className="progress-note">顺着聊就好，不用急着得出结论 ~</div>
+            {degraded && (
+              <div className="degraded-note">简易模式：模型未生效，正在用题库题（站长可在「设置」检查配置）</div>
+            )}
           </div>
           <div className="msgs" ref={scrollRef}>
             {msgs.map((m, i) => (

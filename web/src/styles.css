@@ -166,6 +166,12 @@ body {
   text-align: center;
 }
 
+.degraded-note {
+  color: var(--warn);
+  font-size: 12px;
+  text-align: center;
+}
+
 .axes {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -295,6 +301,12 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.settings-readonly {
+  margin: 0;
+  color: var(--warn);
+  font-size: 12px;
 }
 
 .field {

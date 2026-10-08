@@ -23,6 +23,7 @@ import {
   classifyUserPrompt,
   resultUserPrompt,
 } from './web/src/lib/prompts.ts'
+import { isOwner, ownerToken, ownerCookieHeader } from './web/src/lib/owner.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -35,12 +36,24 @@ const dataDir = join(__dirname, 'data')
 const settingsFile = join(dataDir, 'settings.json')
 const keysFile = join(dataDir, 'keys.json')
 
+// 站长兜底:带 ?owner=<token> 访问即种下 mbti_owner cookie(之后据此判为站长)
+app.use((req, res, next) => {
+  const url = new URL(req.url, 'http://localhost')
+  const ownerParam = url.searchParams.get('owner')
+  if (!ownerParam) return next()
+  if (ownerParam !== ownerToken(dataDir)) return res.status(403).send('invalid owner token')
+  if (url.pathname.startsWith('/api/')) return next()
+  url.searchParams.delete('owner')
+  res.setHeader('Set-Cookie', ownerCookieHeader(ownerToken(dataDir)))
+  res.redirect(302, url.pathname + (url.search || ''))
+})
+
 app.use(express.static(distDir))
 
 const sessions = new Map()
 const stats = { start: 0, answer: 0, done: 0, reset: 0, perCode: {} }
 
-const DEFAULTS = { provider: 'zxGateway', baseURL: '', model: '', maxTokens: 1024, temperature: 0.6 }
+const DEFAULTS = { provider: 'zxGateway', baseURL: '', model: '', maxTokens: 2048, temperature: 0.6 }
 const now = () => Date.now()
 const progressOf = (s) => ({ qCount: s.qCount, minQ: s.minQ, maxQ: s.maxQ })
 
@@ -65,25 +78,57 @@ async function loadSettings() {
   return { settings: s, keys: k }
 }
 
+/** 本地默认走本机博客网关;线上由 ZX_AI_GATEWAY_URL 注入(app:3000 内网) */
+const DEFAULT_GATEWAY = 'http://localhost:3000/api/ai/v1'
+
 async function resolveEndpoint() {
   const { settings, keys } = await loadSettings()
-  const apiKey = (settings.apiKey || keys.apiKey || '').trim()
+  const apiKey = (settings.apiKey || keys.apiKey || process.env.ZX_AI_APP_TOKEN || '').trim()
   let baseURL = (settings.baseURL || '').trim().replace(/\/$/, '')
   if (!baseURL && settings.provider === 'zxGateway') {
-    baseURL = (process.env.ZX_GATEWAY_BASE_URL || '').trim().replace(/\/$/, '')
+    const envUrl = (process.env.ZX_AI_GATEWAY_URL || process.env.ZX_GATEWAY_BASE_URL || '').trim().replace(/\/$/, '')
+    baseURL = envUrl || DEFAULT_GATEWAY
   }
   if (!baseURL) return null
   const url = baseURL.endsWith('/chat/completions') ? baseURL : baseURL + '/chat/completions'
   return { url, apiKey, settings }
 }
 
-async function callLLMJson(system, user, { temperature, maxTokens } = {}) {
-  const ep = await resolveEndpoint()
-  if (!ep) return null
-  const { settings } = ep
+/** 宽容解析:剥 ```json 围栏、截取首个平衡的 {} */
+function extractJson(text) {
+  if (typeof text !== 'string') return null
+  let s = text.trim()
+  if (!s) return null
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  if (fence) s = fence[1].trim()
   try {
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 25000)
+    return JSON.parse(s)
+  } catch {
+    /* 继续尝试截取 */
+  }
+  const start = s.indexOf('{')
+  if (start < 0) return null
+  let depth = 0
+  for (let i = start; i < s.length; i++) {
+    if (s[i] === '{') depth++
+    else if (s[i] === '}') {
+      depth--
+      if (depth === 0) {
+        try {
+          return JSON.parse(s.slice(start, i + 1))
+        } catch {
+          return null
+        }
+      }
+    }
+  }
+  return null
+}
+
+async function llmOnce(ep, settings, system, user, tokens, temperature) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 30000)
+  try {
     const r = await fetch(ep.url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: ep.apiKey ? `Bearer ${ep.apiKey}` : '' },
@@ -93,20 +138,45 @@ async function callLLMJson(system, user, { temperature, maxTokens } = {}) {
           { role: 'system', content: system },
           { role: 'user', content: user },
         ],
-        temperature: temperature ?? Number(settings.temperature ?? 0.6),
-        max_tokens: maxTokens ?? Number(settings.maxTokens ?? 1024),
+        temperature,
+        max_tokens: tokens,
         response_format: { type: 'json_object' },
       }),
       signal: ctrl.signal,
     })
-    clearTimeout(timer)
-    if (!r.ok) return null
+    if (!r.ok) {
+      const t = await r.text().catch(() => '')
+      console.warn('[mbti] LLM HTTP', r.status, t.slice(0, 200))
+      return { ok: false }
+    }
     const data = await r.json()
     const content = data?.choices?.[0]?.message?.content || ''
-    return JSON.parse(content)
-  } catch {
-    return null
+    const parsed = extractJson(content)
+    if (!parsed) {
+      console.warn('[mbti] LLM 返回无法解析 finish=%s len=%d', data?.choices?.[0]?.finish_reason, content.length)
+      return { ok: false }
+    }
+    return { ok: true, value: parsed }
+  } catch (e) {
+    console.warn('[mbti] LLM 调用异常:', e?.message || e)
+    return { ok: false }
+  } finally {
+    clearTimeout(timer)
   }
+}
+
+async function callLLMJson(system, user, { temperature, maxTokens } = {}) {
+  const ep = await resolveEndpoint()
+  if (!ep) return null
+  const { settings } = ep
+  const temp = temperature ?? Number(settings.temperature ?? 0.6)
+  const base = maxTokens ?? Number(settings.maxTokens ?? 2048)
+  let res = await llmOnce(ep, settings, system, user, base, temp)
+  if (!res.ok) {
+    // 思考型模型可能把预算吃光导致 content 为空 —— 加倍重试一次
+    res = await llmOnce(ep, settings, system, user, Math.min(base * 2, 8192), temp)
+  }
+  return res.ok ? res.value : null
 }
 
 // ---------- 场景生成 ----------
@@ -114,11 +184,12 @@ async function callLLMJson(system, user, { temperature, maxTokens } = {}) {
 /** 无模型降级:直接把参照题库题当场景(带 A/B) */
 function fallbackScenario(probe) {
   const q = MBTI_BANK.find((x) => x.id === probe.refId)
-  if (!q) return { reply: '最近过得怎么样？说说你平时更喜欢怎么安排事情吧。', hints: [], domain: '日常' }
+  if (!q) return { reply: '最近过得怎么样？说说你平时更喜欢怎么安排事情吧。', hints: [], domain: '日常', degraded: true }
   return {
     reply: `${q.stem}\n\n（可以选 A / B，也可以直接说说你的想法）\nA. ${q.optionA}\nB. ${q.optionB}`,
     hints: [q.optionA, q.optionB],
     domain: '日常',
+    degraded: true,
   }
 }
 
@@ -132,7 +203,7 @@ async function genScenario(args) {
       recent: args.recent || [],
       lastAnswer: args.lastAnswer,
     }),
-    { temperature: 0.85, maxTokens: 500 },
+    { temperature: 0.85, maxTokens: 1600 },
   )
   if (!raw || typeof raw.reply !== 'string' || !raw.reply.trim()) return fallbackScenario(args.probe)
   const hints = Array.isArray(raw.hints)
@@ -142,6 +213,7 @@ async function genScenario(args) {
     reply: raw.reply.trim(),
     hints,
     domain: typeof raw.domain === 'string' ? raw.domain.slice(0, 12) : '',
+    degraded: false,
   }
 }
 
@@ -169,7 +241,7 @@ async function classifyAnswer(args) {
   const raw = await callLLMJson(
     CLASSIFY_SYSTEM,
     classifyUserPrompt(args),
-    { temperature: 0.2, maxTokens: 200 },
+    { temperature: 0.2, maxTokens: 1000 },
   )
   if (!raw) return fallbackClassify(args.probe, args.answer)
   const n = Math.round(Number(raw.score))
@@ -201,7 +273,7 @@ async function genResult(code, themes) {
   const raw = await callLLMJson(
     RESULT_SYSTEM.replace('{CODE}', code),
     resultUserPrompt({ themes }),
-    { temperature: 0.8, maxTokens: 500 },
+    { temperature: 0.8, maxTokens: 1600 },
   )
   if (raw && typeof raw.summary === 'string' && raw.summary.trim()) return raw.summary.trim()
   return TYPE_BLURB[code] || '你的回答里藏着一套属于自己的方式。愿它帮你更温柔地理解自己。'
@@ -215,12 +287,12 @@ app.post('/api/mbti/start', async (_req, res) => {
   const probe = pickProbe(s, MBTI_BANK)
   sessions.set(id, s)
   stats.start++
-  if (!probe) return res.json({ sessionId: id, message: '你好，我们可以慢慢聊聊。', hints: [], progress: progressOf(s), conf: s.conf })
+  if (!probe) return res.json({ sessionId: id, message: '你好，我们可以慢慢聊聊。', hints: [], progress: progressOf(s), conf: s.conf, degraded: false })
   const g = await genScenario({ probe, mode: 'opening', recentDomains: [], recent: [] })
   s.currentPrompt = g.reply
   s.currentHints = g.hints
   if (g.domain) s.recentDomains.push(g.domain)
-  res.json({ sessionId: id, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf })
+  res.json({ sessionId: id, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded })
 })
 
 app.post('/api/mbti/answer', async (req, res) => {
@@ -241,7 +313,7 @@ app.post('/api/mbti/answer', async (req, res) => {
       recent: s.recentSummaries,
       lastAnswer: text,
     })
-    return res.json({ clarify: true, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf })
+    return res.json({ clarify: true, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded })
   }
 
   const score = await classifyAnswer({ dim: probe.dim, scenario: s.currentPrompt, probe, answer: text })
@@ -280,7 +352,7 @@ app.post('/api/mbti/answer', async (req, res) => {
     s.recentDomains.push(g.domain)
     if (s.recentDomains.length > 3) s.recentDomains.shift()
   }
-  res.json({ message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf })
+  res.json({ message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded })
 })
 
 app.post('/api/mbti/reset', (req, res) => {
@@ -303,19 +375,21 @@ app.post('/api/mbti/stats', (req, res) => {
 
 app.get('/api/mbti/stats', (_req, res) => res.json(stats))
 
-app.get('/api/settings', async (_req, res) => {
+app.get('/api/settings', async (req, res) => {
   const { settings, keys } = await loadSettings()
   res.json({
     provider: settings.provider,
     baseURL: settings.baseURL || '',
     model: settings.model || '',
-    maxTokens: settings.maxTokens ?? 1024,
+    maxTokens: settings.maxTokens ?? 2048,
     temperature: settings.temperature ?? 0.6,
     hasKey: Boolean(settings.apiKey || keys.apiKey),
+    isOwner: isOwner(req, dataDir),
   })
 })
 
 app.post('/api/settings', async (req, res) => {
+  if (!isOwner(req, dataDir)) return res.status(403).json({ error: 'forbidden', message: '仅站长可修改配置' })
   const b = req.body || {}
   const cur = { ...DEFAULTS, ...(await readJson(settingsFile, {})) }
   const keys = await readJson(keysFile, {})

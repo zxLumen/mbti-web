@@ -14,5 +14,6 @@
     "baseUrl": ".",
     "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/lib/owner.ts"]
 }
