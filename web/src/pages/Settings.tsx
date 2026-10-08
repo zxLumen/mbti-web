@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api, type AppSettings } from '../lib/api.js'
+import { THEMES, readTheme, saveTheme } from '../lib/theme.js'
 
 export function Settings() {
+  const [theme, setTheme] = useState<string>(() => readTheme())
   const [s, setS] = useState<AppSettings>({
     provider: 'zxGateway',
     baseURL: '',
@@ -42,6 +44,22 @@ export function Settings() {
   return (
     <div className="settings card">
       <h1>模型设置</h1>
+      <div className="field">
+        <label>主题风格（立即生效，仅本机）</label>
+        <select
+          value={theme}
+          onChange={(e) => {
+            setTheme(e.target.value)
+            saveTheme(e.target.value)
+          }}
+        >
+          {THEMES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      </div>
       {!isOwner && (
         <p className="settings-readonly">当前为只读视图 · 仅站长可修改</p>
       )}

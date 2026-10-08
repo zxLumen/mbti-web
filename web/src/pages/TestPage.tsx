@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, streamTurn, type HistoryEntry, type Progress, type Tendency, type TurnResp } from '../lib/api.js'
+import { typeMeta } from '../lib/mbti-meta.js'
+import { Mascot } from '../components/Mascot.js'
 
 interface Msg {
   role: 'ai' | 'user'
@@ -309,9 +311,14 @@ export function TestPage({
       {done && (
         <div className="result-wrap">
           <div className="card done-card">
-            <div className="done-emoji">🎉</div>
+            <Mascot code={resultCode} size={120} />
             <h1 style={{ textAlign: 'center' }}>这一轮聊完啦</h1>
             <div className="result-code">{resultCode}</div>
+            {typeMeta(resultCode) && (
+              <div className="done-name">
+                {typeMeta(resultCode)!.name} · {typeMeta(resultCode)!.alias}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
               <button className="btn" onClick={onViewReport}>
                 查看报告

@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { TestPage } from './pages/TestPage.js'
 import { Report } from './pages/Report.js'
 import { Settings as SettingsPage } from './pages/Settings.js'
 import { readHistory, writeHistory, clearHistory } from './lib/report-store.js'
+import { applyTheme, readTheme } from './lib/theme.js'
 import type { HistoryEntry } from './lib/api.js'
 
 type Tab = 'test' | 'report' | 'settings'
@@ -10,6 +11,10 @@ type Tab = 'test' | 'report' | 'settings'
 export function App() {
   const [tab, setTab] = useState<Tab>('test')
   const [history, setHistory] = useState<HistoryEntry[]>(() => readHistory())
+
+  useEffect(() => {
+    applyTheme(readTheme())
+  }, [])
 
   const addEntry = (e: HistoryEntry) => setHistory((h) => writeHistory([e, ...h]))
   const onClear = () => {

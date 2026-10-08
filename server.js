@@ -49,6 +49,9 @@ app.use((req, res, next) => {
   res.redirect(302, url.pathname + (url.search || ''))
 })
 
+// 类型小人插画(用户自行放置,不入库;找不到则前端回退 emoji)
+app.use('/mascots', express.static(join(__dirname, 'mascots')))
+
 app.use(express.static(distDir))
 
 const sessions = new Map()
