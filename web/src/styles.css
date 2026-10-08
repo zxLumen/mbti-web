@@ -150,6 +150,22 @@ body {
   background: color-mix(in srgb, var(--accent) 14%, var(--card));
 }
 
+.bubble.ai {
+  line-height: 1.75;
+}
+
+.ai-para {
+  margin: 0;
+}
+
+.ai-para + .ai-para {
+  margin-top: 8px;
+}
+
+.ai-para-q {
+  font-weight: 600;
+}
+
 .progress {
   display: flex;
   flex-direction: column;
@@ -265,6 +281,64 @@ body {
   font-size: 14px;
   line-height: 1.9;
   margin: 0;
+  white-space: pre-wrap;
+}
+
+.history {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.history-clear {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  border-radius: 8px;
+  padding: 2px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.history-item {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--card));
+}
+
+.history-item summary {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.history-item b {
+  letter-spacing: 2px;
+}
+
+.history-date {
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.history-item p {
+  margin: 8px 0 0;
+  color: var(--dim);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
 }
 
 .result-axes {

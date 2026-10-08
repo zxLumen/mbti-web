@@ -53,6 +53,10 @@ export const api = {
   reset: (sessionId: string) => post<{ ok: boolean }>('/api/mbti/reset', { sessionId }),
   stats: (p: { type: string; code?: string }) => post<{ ok: boolean }>('/api/mbti/stats', p).catch(() => ({ ok: false })),
   getSettings: () => fetch('/api/settings').then((r) => r.json() as Promise<AppSettings>),
+  resume: (id: string) =>
+    fetch(`/api/mbti/session?id=${encodeURIComponent(id)}`).then(async (r) =>
+      r.ok ? ((await r.json()) as TurnResp) : null,
+    ),
   saveSettings: (s: Partial<AppSettings> & { apiKey?: string }) =>
     post<{ ok?: boolean; hasKey?: boolean; error?: string; message?: string }>('/api/settings', s),
 }

@@ -3,6 +3,7 @@ dist
 data/settings.json
 data/keys.json
 data/owner.token
+data/sessions.json
 .env
 .env.local
 .DS_Store

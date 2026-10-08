@@ -48,7 +48,13 @@ npm run watch      # 仅后端改动时自动重启(node --watch)
 | minQ | 12 | 最少题数 |
 | maxQ | 30 | 上限,到达即结束并在结果页标注置信度 |
 | confT | 0.85 | 四维置信度阈值(每维约 5 道一致作答即可达标) |
-| TTL | 45min | 会话(内存)过期时间 |
+| TTL | 6h | 会话过期时间(内存 + `data/sessions.json`,重启不丢) |
+
+## 会话续测与历史
+
+- **会话落盘** `data/sessions.json`(已 gitignore);服务端重启**不丢**;前端把进行中的对话存
+  `localStorage['mbti.session.v1']`,刷新 / 关开面板会**自动续上**(`GET /api/mbti/session?id=` 恢复)。
+- **历史结果** 保留在 `localStorage['mbti.history.v1']`(最近 12 次);结果页可查看并可清空。
 
 ## 配置（仅站长）
 

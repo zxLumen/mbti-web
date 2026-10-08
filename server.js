@@ -35,6 +35,7 @@ const distDir = join(__dirname, 'dist')
 const dataDir = join(__dirname, 'data')
 const settingsFile = join(dataDir, 'settings.json')
 const keysFile = join(dataDir, 'keys.json')
+const sessionsFile = join(dataDir, 'sessions.json')
 
 // 站长兜底:带 ?owner=<token> 访问即种下 mbti_owner cookie(之后据此判为站长)
 app.use((req, res, next) => {
@@ -58,9 +59,16 @@ const now = () => Date.now()
 const progressOf = (s) => ({ qCount: s.qCount, minQ: s.minQ, maxQ: s.maxQ })
 
 function cleanup() {
-  const ttl = 45 * 60 * 1000
+  const ttl = 6 * 60 * 60 * 1000
   const t = now()
-  for (const [k, s] of sessions) if (t - s.lastAt > ttl) sessions.delete(k)
+  let removed = false
+  for (const [k, s] of sessions) {
+    if (t - s.lastAt > ttl) {
+      sessions.delete(k)
+      removed = true
+    }
+  }
+  if (removed) persistSessions()
 }
 setInterval(cleanup, 60 * 1000)
 
@@ -76,6 +84,32 @@ async function loadSettings() {
   const s = { ...DEFAULTS, ...(await readJson(settingsFile, {})) }
   const k = await readJson(keysFile, {})
   return { settings: s, keys: k }
+}
+
+// ---- 会话落盘(重启不丢) ----
+const serializeSession = (s) => ({ ...s, usedIds: [...s.usedIds] })
+const deserializeSession = (o) => ({ ...o, usedIds: new Set(Array.isArray(o.usedIds) ? o.usedIds : []) })
+
+async function loadSessions() {
+  const obj = await readJson(sessionsFile, {})
+  for (const [id, o] of Object.entries(obj || {})) {
+    try {
+      sessions.set(id, deserializeSession(o))
+    } catch {
+      /* 跳过损坏条目 */
+    }
+  }
+}
+
+async function persistSessions() {
+  const obj = {}
+  for (const [id, s] of sessions) obj[id] = serializeSession(s)
+  try {
+    await fs.mkdir(dataDir, { recursive: true })
+    await fs.writeFile(sessionsFile, JSON.stringify(obj))
+  } catch (e) {
+    console.warn('[mbti] 会话落盘失败:', e?.message || e)
+  }
 }
 
 /** 本地默认走本机博客网关;线上由 ZX_AI_GATEWAY_URL 注入(app:3000 内网) */
@@ -465,6 +499,7 @@ app.post('/api/mbti/start', async (_req, res) => {
   stats.start++
   sseInit(res)
   if (!probe) {
+    persistSessions()
     sseSend(res, { type: 'end', payload: { sessionId: id, message: '你好，我们可以慢慢聊聊。', hints: [], progress: progressOf(s), conf: s.conf, degraded: false } })
     return res.end()
   }
@@ -472,6 +507,7 @@ app.post('/api/mbti/start', async (_req, res) => {
   s.currentPrompt = g.reply
   s.currentHints = g.hints
   if (g.domain) s.recentDomains.push(g.domain)
+  persistSessions()
   sseSend(res, {
     type: 'end',
     payload: { sessionId: id, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded },
@@ -496,6 +532,8 @@ app.post('/api/mbti/answer', async (req, res) => {
       { mode: 'clarify', recentDomains: s.recentDomains, recent: s.recentSummaries, lastAnswer: text },
       deltaSink(res),
     )
+    s.currentHints = g.hints
+    persistSessions()
     sseSend(res, { type: 'end', payload: { clarify: true, message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded } })
     return res.end()
   }
@@ -512,9 +550,12 @@ app.post('/api/mbti/answer', async (req, res) => {
     stats.done++
     stats.perCode[s.resultCode] = (stats.perCode[s.resultCode] || 0) + 1
     const summary = await genResultStream(s.resultCode, s.recentSummaries, deltaSink(res))
+    s.resultSummary = summary
+    s.resultTendencies = tendencies(s)
+    persistSessions()
     sseSend(res, {
       type: 'end',
-      payload: { done: true, resultCode: s.resultCode, summary, tendencies: tendencies(s), progress: progressOf(s), conf: s.conf },
+      payload: { done: true, resultCode: s.resultCode, summary, tendencies: s.resultTendencies, progress: progressOf(s), conf: s.conf },
     })
     return res.end()
   }
@@ -532,13 +573,34 @@ app.post('/api/mbti/answer', async (req, res) => {
     if (s.recentDomains.length > 3) s.recentDomains.shift()
   }
   sseSend(res, { type: 'end', payload: { message: g.reply, hints: g.hints, progress: progressOf(s), conf: s.conf, degraded: g.degraded } })
+  persistSessions()
   res.end()
 })
 
 app.post('/api/mbti/reset', (req, res) => {
   const { sessionId } = req.body || {}
-  if (sessionId && sessions.delete(sessionId)) stats.reset++
+  if (sessionId && sessions.delete(sessionId)) {
+    stats.reset++
+    persistSessions()
+  }
   res.json({ ok: true })
+})
+
+// 恢复:客户端带着 sessionId 回来,拿回进度/是否结束/结果
+app.get('/api/mbti/session', (req, res) => {
+  const id = String(req.query.id || '')
+  const s = sessions.get(id)
+  if (!s) return res.status(404).json({ error: 'not_found' })
+  res.json({
+    sessionId: id,
+    progress: progressOf(s),
+    conf: s.conf,
+    hints: s.currentHints || [],
+    done: Boolean(s.done),
+    resultCode: s.resultCode || '',
+    summary: s.resultSummary || '',
+    tendencies: s.resultTendencies || [],
+  })
 })
 
 app.post('/api/mbti/stats', (req, res) => {
@@ -594,4 +656,6 @@ app.post('/api/settings', async (req, res) => {
 
 app.get('*', (_req, res) => res.sendFile(join(distDir, 'index.html')))
 
-app.listen(PORT, () => console.log('mbti-web listening on :' + PORT))
+loadSessions().then(() => {
+  app.listen(PORT, () => console.log('mbti-web listening on :' + PORT))
+})
