@@ -4,6 +4,7 @@ data/settings.json
 data/keys.json
 data/owner.token
 data/sessions.json
+data/records.json
 mascots/*
 !mascots/README.md
 .env
