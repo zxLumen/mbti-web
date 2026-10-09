@@ -37,6 +37,9 @@ function Bar({ t }: { t: Tendency }) {
   const magPct = Math.round(50 + Math.abs(v) * 50)
   const pctText = magPct >= 90 ? '≥90%' : magPct <= 10 ? '≤10%' : magPct + '%'
   const segW = Math.abs(v) * 50
+  // caption 落在主导侧下方;接近中间则居中,避免误导
+  const mid = magPct <= 55
+  const capCls = mid ? 'rbar-cap mid' : dom === 'neg' ? 'rbar-cap right' : 'rbar-cap'
   return (
     <div className="rbar-item">
       <div className="rbar-row">
@@ -47,7 +50,7 @@ function Bar({ t }: { t: Tendency }) {
         </div>
         <span className={`rlabel right ${dom === 'neg' ? 'dom' : ''}`}>{t.negLabel}</span>
       </div>
-      <div className="rbar-cap">
+      <div className={capCls}>
         {domLabel} · {strengthWord(v)} {pctText}
       </div>
     </div>
@@ -433,11 +436,21 @@ async function makeReportImage(e: HistoryEntry, layout: ReportLayout = 'bars'): 
     // 中心线
     ctx.fillStyle = barMid
     ctx.fillRect(midX - 1, y - 14, 2, 30)
-    // 说明(条下方)
+    // 说明(条下方):落在主导侧;接近中间则居中
     ctx.fillStyle = dim
     ctx.font = font(24, 600)
+    const capTxt = `${domLabel} · ${strengthWord(v)} ${pctText}`
+    if (magPct <= 55) {
+      ctx.textAlign = 'center'
+      ctx.fillText(capTxt, midX, y + 42)
+    } else if (dom === 'neg') {
+      ctx.textAlign = 'right'
+      ctx.fillText(capTxt, barX + barW, y + 42)
+    } else {
+      ctx.textAlign = 'left'
+      ctx.fillText(capTxt, barX, y + 42)
+    }
     ctx.textAlign = 'left'
-    ctx.fillText(`${domLabel} · ${strengthWord(v)} ${pctText}`, barX, y + 42)
     y += 96
   }
 
