@@ -255,6 +255,8 @@ async function archiveRecord(s) {
       qCount: s.qCount,
       history: s.history || [],
       evidence: s.answerEvidence || [],
+      summary: s.resultSummary || '',
+      report: s.resultReport || null,
     })
     await fs.mkdir(dataDir, { recursive: true })
     const tmp = recordsFile + '.tmp'
@@ -704,6 +706,7 @@ app.post('/api/mbti/answer', async (req, res) => {
       const evidence = (s.answerEvidence || []).map((ev) => `${DIM_INFO[ev.dim].topic}｜${ev.text}`)
       const report = await genReport(s.resultCode, tend, evidence)
       s.resultSummary = report.overview
+      s.resultReport = report
       s.resultTendencies = tend
       persistSessions()
       await archiveRecord(s)
@@ -736,6 +739,61 @@ app.post('/api/mbti/answer', async (req, res) => {
     persistSessions()
     finish({ message: '刚才没接上，能再说一次吗？', hints: [], progress: progressOf(s), conf: s.conf, degraded: true })
   }
+})
+
+// 站长回填/更新测算记录(只增不删;按 id 去重,缺 report 则生成一次)
+app.post('/api/mbti/records', async (req, res) => {
+  if (!isOwner(req, dataDir)) return res.status(403).json({ error: 'forbidden' })
+  const incoming = Array.isArray(req.body?.records) ? req.body.records : []
+  if (!incoming.length) return res.json({ ok: true, added: 0, updated: 0, total: 0 })
+  const obj = await readJson(recordsFile, [])
+  const list = Array.isArray(obj) ? obj : []
+  let added = 0
+  let updated = 0
+  for (const it of incoming) {
+    if (!it || typeof it !== 'object') continue
+    const code = String(it.code || '')
+    if (!/^[A-Z]{4}$/.test(code)) continue
+    const id = typeof it.id === 'string' && it.id ? it.id : crypto.randomUUID()
+    const rec = {
+      id,
+      at: Number(it.at) || Date.now(),
+      algoVersion: ALGO_VERSION,
+      code,
+      qCount: Number(it.qCount) || (Array.isArray(it.history) ? it.history.length : 0),
+      history: Array.isArray(it.history) ? it.history : [],
+      evidence: Array.isArray(it.evidence) ? it.evidence : [],
+      summary: typeof it.summary === 'string' ? it.summary : '',
+      report: it.report || null,
+    }
+    if (!rec.report) {
+      try {
+        const tend = tendenciesFromHistory(rec.history)
+        const ev = (rec.evidence || []).map((e) => (e && e.text ? String(e.text) : '')).filter(Boolean)
+        rec.report = await genReport(code, tend, ev)
+        if (!rec.summary) rec.summary = rec.report.overview || ''
+      } catch {
+        /* 生成失败则先存原始数据 */
+      }
+    }
+    const exist = list.find((r) => r && r.id === id)
+    if (exist) {
+      Object.assign(exist, rec, { report: rec.report || exist.report, summary: rec.summary || exist.summary })
+      updated++
+    } else {
+      list.push(rec)
+      added++
+    }
+  }
+  try {
+    await fs.mkdir(dataDir, { recursive: true })
+    const tmp = recordsFile + '.tmp'
+    await fs.writeFile(tmp, JSON.stringify(list, null, 2))
+    await fs.rename(tmp, recordsFile)
+  } catch (e) {
+    return res.status(500).json({ error: 'write_failed' })
+  }
+  res.json({ ok: true, added, updated, total: list.length })
 })
 
 // 站长测算记录(只读;按当前算法重算后返回,便于算法变更后直接复用)

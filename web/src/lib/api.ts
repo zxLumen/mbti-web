@@ -107,6 +107,9 @@ export const api = {
     ),
   report: (code: string, tendencies: Tendency[]) =>
     post<{ report?: StructuredReport }>('/api/mbti/report', { code, tendencies }),
+  records: () => fetch('/api/mbti/records').then((r) => (r.ok ? r.json() : null)),
+  pushRecords: (records: unknown[]) =>
+    post<{ ok?: boolean; added?: number; updated?: number; total?: number }>('/api/mbti/records', { records }),
   saveSettings: (s: Partial<AppSettings> & { apiKey?: string }) =>
     post<{ ok?: boolean; hasKey?: boolean; error?: string; message?: string }>('/api/settings', s),
 }

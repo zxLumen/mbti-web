@@ -587,11 +587,13 @@ export function Report({
   onClear,
   onGoTest,
   onUpdate,
+  onAdopt,
 }: {
   history: HistoryEntry[]
   onClear: () => void
   onGoTest: () => void
   onUpdate: (at: number, patch: Partial<HistoryEntry>) => void
+  onAdopt: (e: HistoryEntry) => void
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [active, setActive] = useState<string>(() => readAtype())
@@ -628,10 +630,10 @@ export function Report({
 
   const toggle = (code: string) => setOpenCode((cur) => (cur === code ? '' : code))
 
-  // 算法变更后:本地按逐题记录重算;站长再从服务器记录刷新(按 sessionId,缺失则按 code 兜底匹配)
-  const refreshed = useRef<Set<string>>(new Set())
+  // 站长:与服务器记录双向同步(本地重算 / 就地更新 / 收养缺失 / 回填本地新增),全自动
+  const pushedRef = useRef('')
   useEffect(() => {
-    // 本地:有逐题记录但算法版本不符 → 重算
+    // 1) 本地:有逐题记录但算法版本不符 → 重算
     for (const e of history) {
       if (e.history?.length && e.algoVersion !== ALGO_VERSION) {
         const t = tendenciesFromHistory(e.history as MbtiHistoryPoint[])
@@ -639,44 +641,94 @@ export function Report({
         onUpdate(e.at, { tendencies: t, code, algoVersion: ALGO_VERSION })
       }
     }
-    if (!history.length) return
+
+    // 2) 拉服务器记录(非站长 403 → 纯本地)
     ;(async () => {
+      type Rec = {
+        id: string
+        code: string
+        tendencies: Tendency[]
+        summary?: string
+        report?: StructuredReport
+        history?: MbtiHistoryPoint[]
+        at?: number
+      }
+      let data: { algoVersion?: string; records?: Rec[] } | null = null
       try {
         const r = await fetch('/api/mbti/records')
-        if (!r.ok) return // 非站长(403)或未启用:静默
-        const data = (await r.json()) as {
-          algoVersion?: string
-          records?: Array<{ id: string; code?: string; tendencies?: Tendency[] }>
-        }
-        const recs = (data.records || []).filter((x) => x && x.tendencies)
-        const usedAt = new Set<number>()
-        for (const rec of recs) {
-          // 先按 sessionId 精确匹配
-          let target = history.find((e) => e.sessionId === rec.id)
-          if (!target) {
-            // 兜底:本地某条没有 sessionId、且 code 相同 → 视为同一次(就地更新,避免重复)
-            target = history.find((e) => !e.sessionId && !usedAt.has(e.at) && e.code === rec.code)
-          }
-          if (!target) continue
-          usedAt.add(target.at)
-          if (refreshed.current.has(`${rec.id}:${target.at}`)) continue
-          refreshed.current.add(`${rec.id}:${target.at}`)
-          const same =
-            target.algoVersion === data.algoVersion &&
-            JSON.stringify(target.tendencies) === JSON.stringify(rec.tendencies)
-          if (same) continue
+        if (!r.ok) return
+        data = (await r.json()) as { algoVersion?: string; records?: Rec[] }
+      } catch {
+        return
+      }
+      const recs = (data.records || []).filter((x) => x && x.tendencies)
+      if (!recs.length && !history.length) return
+      const recIds = new Set(recs.map((x) => x.id))
+      const matchedAt = new Set<number>()
+
+      // 2a) 就地更新:本地有匹配(sessionId → code 兜底)
+      for (const rec of recs) {
+        let target = history.find((e) => e.sessionId === rec.id)
+        if (!target) target = history.find((e) => !e.sessionId && !matchedAt.has(e.at) && e.code === rec.code)
+        if (!target) continue
+        matchedAt.add(target.at)
+        const changed =
+          target.algoVersion !== data.algoVersion ||
+          JSON.stringify(target.tendencies) !== JSON.stringify(rec.tendencies) ||
+          target.sessionId !== rec.id
+        if (changed)
           onUpdate(target.at, {
             tendencies: rec.tendencies,
             code: rec.code || target.code,
             sessionId: rec.id,
             algoVersion: data.algoVersion,
           })
+      }
+
+      // 2b) 收养:服务器有、本地完全没有的 → 新增条目
+      for (const rec of recs) {
+        if (recIds.has(rec.id) && history.some((e) => e.sessionId === rec.id)) continue
+        if (history.some((e) => !e.sessionId && e.code === rec.code && matchedAt.has(e.at))) continue
+        if (!rec.report && !rec.summary) continue
+        onAdopt({
+          code: rec.code,
+          summary: rec.summary || rec.report?.overview || '',
+          tendencies: rec.tendencies,
+          at: rec.at || Date.now(),
+          report: rec.report,
+          sessionId: rec.id,
+          history: rec.history,
+          algoVersion: data.algoVersion,
+        })
+      }
+
+      // 2c) 回填:本地有、服务器没有的 → 上传(只推一次,幂等)
+      const toPush = history
+        .filter((e) => !(e.sessionId && recIds.has(e.sessionId)) && !matchedAt.has(e.at))
+        .map((e) => ({
+          id: e.sessionId,
+          at: e.at,
+          code: e.code,
+          qCount: e.history?.length || 0,
+          history: e.history || [],
+          summary: e.summary,
+          report: e.report,
+        }))
+      const sig = toPush.map((x) => x.id || `${x.code}@${x.at}`).join(',')
+      if (toPush.length && sig !== pushedRef.current) {
+        pushedRef.current = sig
+        try {
+          await fetch('/api/mbti/records', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ records: toPush }),
+          })
+        } catch {
+          /* 忽略 */
         }
-      } catch {
-        /* 忽略 */
       }
     })()
-  }, [history, onUpdate])
+  }, [history, onUpdate, onAdopt])
 
   return (
     <div className="report">

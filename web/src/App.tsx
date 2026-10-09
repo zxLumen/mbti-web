@@ -20,6 +20,11 @@ export function App() {
   const addEntry = (e: HistoryEntry) => setHistory((h) => writeHistory([e, ...h]))
   const updateEntry = (at: number, patch: Partial<HistoryEntry>) =>
     setHistory((h) => writeHistory(h.map((e) => (e.at === at ? { ...e, ...patch } : e))))
+  const adoptEntry = (e: HistoryEntry) =>
+    setHistory((h) => {
+      if (e.sessionId && h.some((x) => x.sessionId === e.sessionId)) return h
+      return writeHistory([e, ...h])
+    })
   const onClear = () => {
     clearHistory()
     setHistory([])
@@ -42,7 +47,13 @@ export function App() {
         <TestPage onComplete={addEntry} onViewReport={() => setTab('report')} />
       </div>
       <div style={{ display: tab === 'report' ? 'contents' : 'none' }}>
-        <Report history={history} onClear={onClear} onGoTest={() => setTab('test')} onUpdate={updateEntry} />
+        <Report
+          history={history}
+          onClear={onClear}
+          onGoTest={() => setTab('test')}
+          onUpdate={updateEntry}
+          onAdopt={adoptEntry}
+        />
       </div>
       <div style={{ display: tab === 'settings' ? 'contents' : 'none' }}>
         <SettingsPage />
