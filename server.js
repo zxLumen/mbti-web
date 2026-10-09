@@ -12,6 +12,8 @@ import {
   canEnd,
   computeType,
   tendencies,
+  tendenciesFromHistory,
+  ALGO_VERSION,
   POS,
 } from './web/src/lib/mbti-engine.ts'
 import {
@@ -39,6 +41,7 @@ const dataDir = join(__dirname, 'data')
 const settingsFile = join(dataDir, 'settings.json')
 const keysFile = join(dataDir, 'keys.json')
 const sessionsFile = join(dataDir, 'sessions.json')
+const recordsFile = join(dataDir, 'records.json')
 
 // 站长兜底:带 ?owner=<token> 访问即种下 mbti_owner cookie(之后据此判为站长)
 app.use((req, res, next) => {
@@ -235,6 +238,31 @@ async function callLLMJson(system, user, { temperature, maxTokens } = {}) {
     res = await llmOnce(ep, settings, system, user, Math.min(base * 2, 8192), temp)
   }
   return res.ok ? res.value : null
+}
+
+// ---- 站长测算记录留档(不受会话 TTL 影响;仅站长本人;不限条数) ----
+async function archiveRecord(s) {
+  if (!s || !s.owner || !s.done) return
+  try {
+    const obj = await readJson(recordsFile, {})
+    const list = Array.isArray(obj) ? obj : Array.isArray(obj.records) ? obj.records : []
+    if (list.some((r) => r && r.id === s.id)) return
+    list.push({
+      id: s.id,
+      at: Date.now(),
+      algoVersion: ALGO_VERSION,
+      code: s.resultCode || '',
+      qCount: s.qCount,
+      history: s.history || [],
+      evidence: s.answerEvidence || [],
+    })
+    await fs.mkdir(dataDir, { recursive: true })
+    const tmp = recordsFile + '.tmp'
+    await fs.writeFile(tmp, JSON.stringify(list, null, 2))
+    await fs.rename(tmp, recordsFile)
+  } catch (e) {
+    console.warn('[mbti] 记录留档失败:', e?.message || e)
+  }
 }
 
 // ---------- 流式(SSE) ----------
@@ -587,9 +615,10 @@ function normalizeReport(code, raw, stack) {
 
 // ---------- 路由 ----------
 
-app.post('/api/mbti/start', async (_req, res) => {
+app.post('/api/mbti/start', async (req, res) => {
   const id = crypto.randomUUID()
   const s = createSession(id)
+  s.owner = isOwner(req, dataDir)
   const probe = pickProbe(s, MBTI_BANK)
   sessions.set(id, s)
   stats.start++
@@ -677,12 +706,15 @@ app.post('/api/mbti/answer', async (req, res) => {
       s.resultSummary = report.overview
       s.resultTendencies = tend
       persistSessions()
+      await archiveRecord(s)
       return finish({
         done: true,
         resultCode: s.resultCode,
         summary: report.overview,
         report,
         tendencies: tend,
+        history: s.history || [],
+        algoVersion: ALGO_VERSION,
         progress: progressOf(s),
         conf: s.conf,
       })
@@ -704,6 +736,18 @@ app.post('/api/mbti/answer', async (req, res) => {
     persistSessions()
     finish({ message: '刚才没接上，能再说一次吗？', hints: [], progress: progressOf(s), conf: s.conf, degraded: true })
   }
+})
+
+// 站长测算记录(只读;按当前算法重算后返回,便于算法变更后直接复用)
+app.get('/api/mbti/records', async (req, res) => {
+  if (!isOwner(req, dataDir)) return res.status(403).json({ error: 'forbidden' })
+  const list = await readJson(recordsFile, [])
+  const records = (Array.isArray(list) ? list : []).map((r) => {
+    const tend = tendenciesFromHistory(r.history || [])
+    const code = tend.map((x) => (x.posPct >= 50 ? POS[x.dim] : ({ EI: 'I', SN: 'N', TF: 'F', JP: 'P' })[x.dim])).join('')
+    return { ...r, code, tendencies: tend }
+  })
+  res.json({ algoVersion: ALGO_VERSION, records })
 })
 
 // 老记录补全报告(或重新生成):只需 code + tendencies,可选 evidence
@@ -796,6 +840,7 @@ app.post('/api/settings', async (req, res) => {
 
 app.get('*', (_req, res) => res.sendFile(join(distDir, 'index.html')))
 
-loadSessions().then(() => {
+loadSessions().then(async () => {
+  for (const s of sessions.values()) await archiveRecord(s)
   app.listen(PORT, () => console.log('mbti-web listening on :' + PORT))
 })

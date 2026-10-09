@@ -58,12 +58,24 @@ export interface StructuredReport {
 }
 
 /** 一次完成的测评结果(存在 localStorage,供「报告」页查看) */
+export interface MbtiHistoryPoint {
+  dim: string
+  score: number
+  w: number
+}
+
 export interface HistoryEntry {
   code: string
   summary: string
   tendencies: Tendency[]
   at: number
   report?: StructuredReport
+  /** 会话 id(可与服务器记录对应,便于算法变更后刷新) */
+  sessionId?: string
+  /** 逐题记录(本地可重算) */
+  history?: MbtiHistoryPoint[]
+  /** 产出该结果时的算法版本 */
+  algoVersion?: string
 }
 
 export interface TurnResp {
@@ -76,6 +88,8 @@ export interface TurnResp {
   summary?: string
   tendencies?: Tendency[]
   report?: StructuredReport
+  history?: MbtiHistoryPoint[]
+  algoVersion?: string
   progress: Progress
   conf: Conf
   degraded?: boolean

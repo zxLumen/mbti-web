@@ -214,6 +214,9 @@ export function TestPage({
             tendencies: p.tendencies || [],
             at: Date.now(),
             report,
+            sessionId,
+            history: p.history,
+            algoVersion: p.algoVersion,
           }
           onComplete(entry)
           applyTypeTheme(entry.code)

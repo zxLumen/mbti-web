@@ -1,4 +1,4 @@
-import type { Axis, Dim, DimTendency, MbtiQuestion, Probe, SessionState } from './mbti-types.js'
+import type { Axis, Dim, DimTendency, MbtiHistoryItem, MbtiQuestion, Probe, SessionState } from './mbti-types.js'
 
 export const DIMS: Array<[Axis, Axis]> = [
   ['E', 'I'],
@@ -94,6 +94,14 @@ export function computeType(s: SessionState): string {
   return code
 }
 
+/** 算法版本:口径变化时递增,用于前端/记录自动重算 */
+export const ALGO_VERSION = 'v2'
+
+/**
+ * 四维倾向(0~100,偏正端百分比)。
+ * 强度 = 一致性:净分 / 绝对分(逐题 score×weight 累加)。
+ * 全程一致 → 100%/0%;摇摆/中立多 → 靠近 50%。不再退化到只会是 0/50/100。
+ */
 export function tendencies(s: SessionState): DimTendency[] {
   const labels: Record<Dim, [string, string]> = {
     EI: ['外向', '内向'],
@@ -102,10 +110,14 @@ export function tendencies(s: SessionState): DimTendency[] {
     JP: ['判断', '知觉'],
   }
   return DIM_KEYS.map((dim) => {
-    const a = s.scores[POS[dim]]
-    const b = s.scores[NEG[dim]]
-    const denom = Math.abs(a) + Math.abs(b)
-    const strength = denom < 1e-6 ? 0 : (a - b) / denom
+    let net = 0
+    let abs = 0
+    for (const h of s.history) {
+      if (h.dim !== dim) continue
+      net += h.score * h.w
+      abs += Math.abs(h.score) * h.w
+    }
+    const strength = abs < 1e-6 ? 0 : net / abs
     return {
       dim,
       posLabel: labels[dim][0],
@@ -113,6 +125,13 @@ export function tendencies(s: SessionState): DimTendency[] {
       posPct: Math.round(clamp(50 + 50 * strength, 0, 100)),
     }
   })
+}
+
+/** 纯函数:仅凭逐题记录重算四维(供前端/脚本在算法变更后回溯) */
+export function tendenciesFromHistory(
+  history: Array<{ dim: string; score: number; w: number }>,
+): DimTendency[] {
+  return tendencies({ history } as unknown as SessionState)
 }
 
 /** 选下一个探测点:置信度最低的维度,平衡两端,挑高权重未用题作参照 */

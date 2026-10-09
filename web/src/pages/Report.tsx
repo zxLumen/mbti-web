@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api.js'
-import type { HistoryEntry, StructuredReport, Tendency } from '../lib/api.js'
+import type { HistoryEntry, MbtiHistoryPoint, StructuredReport, Tendency } from '../lib/api.js'
 import { typeMeta, TYPE_META } from '../lib/mbti-meta.js'
 import { Mascot } from '../components/Mascot.js'
 import { readUnlocked } from '../lib/report-store.js'
 import TYPE_REPORTS_JSON from '../data/type-reports.json'
 import { readAtype, applyTypeTheme, applyDefaultTheme } from '../lib/theme.js'
+import { ALGO_VERSION, tendenciesFromHistory } from '../lib/mbti-engine.js'
 
 function fmt(at: number): string {
   try {
@@ -614,20 +615,52 @@ export function Report({
 
   const toggle = (code: string) => setOpenCode((cur) => (cur === code ? '' : code))
 
-  // 老记录(缺 report):后台逐条补全并落盘
-  const pending = useRef<Set<number>>(new Set())
+  // 算法变更后:本地按逐题记录重算;站长再从服务器记录刷新(按 sessionId,缺失则按 code 兜底匹配)
+  const refreshed = useRef<Set<string>>(new Set())
   useEffect(() => {
-    const missing = history.filter((e) => !e.report && TYPE_META[e.code] && !pending.current.has(e.at))
-    if (!missing.length) return
+    // 本地:有逐题记录但算法版本不符 → 重算
+    for (const e of history) {
+      if (e.history?.length && e.algoVersion !== ALGO_VERSION) {
+        const t = tendenciesFromHistory(e.history as MbtiHistoryPoint[])
+        const code = t.map((x) => (x.posPct >= 50 ? x.dim[0] : x.dim[1])).join('')
+        onUpdate(e.at, { tendencies: t, code, algoVersion: ALGO_VERSION })
+      }
+    }
+    if (!history.length) return
     ;(async () => {
-      for (const e of missing) {
-        pending.current.add(e.at)
-        try {
-          const r = await api.report(e.code, e.tendencies || [])
-          if (r.report) onUpdate(e.at, { report: r.report, summary: r.report.overview || e.summary })
-        } catch {
-          /* 忽略,下次再试 */
+      try {
+        const r = await fetch('/api/mbti/records')
+        if (!r.ok) return // 非站长(403)或未启用:静默
+        const data = (await r.json()) as {
+          algoVersion?: string
+          records?: Array<{ id: string; code?: string; tendencies?: Tendency[] }>
         }
+        const recs = (data.records || []).filter((x) => x && x.tendencies)
+        const usedAt = new Set<number>()
+        for (const rec of recs) {
+          // 先按 sessionId 精确匹配
+          let target = history.find((e) => e.sessionId === rec.id)
+          if (!target) {
+            // 兜底:本地某条没有 sessionId、且 code 相同 → 视为同一次(就地更新,避免重复)
+            target = history.find((e) => !e.sessionId && !usedAt.has(e.at) && e.code === rec.code)
+          }
+          if (!target) continue
+          usedAt.add(target.at)
+          if (refreshed.current.has(`${rec.id}:${target.at}`)) continue
+          refreshed.current.add(`${rec.id}:${target.at}`)
+          const same =
+            target.algoVersion === data.algoVersion &&
+            JSON.stringify(target.tendencies) === JSON.stringify(rec.tendencies)
+          if (same) continue
+          onUpdate(target.at, {
+            tendencies: rec.tendencies,
+            code: rec.code || target.code,
+            sessionId: rec.id,
+            algoVersion: data.algoVersion,
+          })
+        }
+      } catch {
+        /* 忽略 */
       }
     })()
   }, [history, onUpdate])
