@@ -1,3 +1,7 @@
+© 2026 刘子祥 · 原创作品，转载请注明出处
+
+> **定位**：心语：对话式 MBTI 测评子应用，经主站应用栏 panel 嵌入。 使用许可见 [LICENSE](./LICENSE)。
+
 # mbti-web
 
 > **状态：维护（低频使用）** · 线上 https://mbti.zxlumen.cn · 体检与重启条件见 [STATUS.md](./STATUS.md)
